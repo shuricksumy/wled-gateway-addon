@@ -12,6 +12,8 @@
 [![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64%20%7C%20armv7-blue)](#-published-images)
 [![Images on GHCR](https://img.shields.io/badge/images-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/shuricksumy?tab=packages&repo_name=wled-gateway-addon)
 
+[![Open your Home Assistant instance and show the add add-on repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fshuricksumy%2Fwled-gateway-addon)
+
 <img src="wled_gateway/screenshots/strip-card.png" width="260" alt="Lovelace card for an LED strip: live gradient preview bar, power and preset buttons, effect and palette dropdowns, brightness, speed and intensity sliders">&nbsp;&nbsp;<img src="wled_gateway/screenshots/matrix-card.png" width="260" alt="Lovelace card for a 512-LED matrix: live dot-matrix preview, control buttons, effect and palette dropdowns and sliders">&nbsp;&nbsp;<img src="wled_gateway/screenshots/device-ui.png" width="260" alt="WLED's own admin web UI embedded directly in a Home Assistant card via the device proxy">
 
 <sub>Live previews and device controls rendered straight into Lovelace — strip, matrix, and the device's own admin UI, embedded.</sub>
@@ -59,6 +61,17 @@ extra authentication to set up.
 
 ## 🚀 Install
 
+[![Open your Home Assistant instance and show the add add-on repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fshuricksumy%2Fwled-gateway-addon)
+
+Click the button — Home Assistant opens the **Add repository** dialog with the URL
+already filled in. Confirm it, then install **WLED Gateway** from the store, list your
+devices under **Configuration**, and start it.
+
+<details>
+<summary><b>Or add the repository by hand</b></summary>
+
+<br>
+
 1. In Home Assistant, go to **Settings → Add-ons → Add-on Store**
 2. Open the **⋮** menu (top right) → **Repositories**
 3. Add this URL:
@@ -68,6 +81,8 @@ extra authentication to set up.
    ```
 
 4. Install **WLED Gateway**, list your devices under **Configuration**, and start it.
+
+</details>
 
 Then head to **[the add-on's documentation](wled_gateway/README.md)** for configuration
 options, the endpoint reference, and copy-pasteable Lovelace card examples.

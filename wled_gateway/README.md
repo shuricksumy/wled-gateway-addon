@@ -266,6 +266,8 @@ cards:
 **2D matrix device card** — same idea, using `/preview2d` and the
 matrix-specific reverse/nightlight switches:
 
+![Full matrix device card: chips, live 2D preview, power/sync/restart row, effect and palette selects, light and speed/intensity sliders](screenshots/matrix-card.png)
+
 ```yaml
 type: vertical-stack
 cards:

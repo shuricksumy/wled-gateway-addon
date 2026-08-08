@@ -141,3 +141,7 @@ workflow**.
 Issues and pull requests are welcome. The add-on is a single, readable
 [`app.py`](wled_gateway/app.py) built on `aiohttp` — see
 [DEVELOPMENT.md](DEVELOPMENT.md) to get a local instance running.
+
+## 📄 License
+
+[MIT](LICENSE) — use it, change it, ship it.

@@ -4,7 +4,8 @@
   "slug": "wled_gateway",
   "description": "Single endpoint for WLED live-preview: holds the one live-view connection each WLED device allows and fans it out to multiple dashboard viewers at once.",
   "url": "https://github.com/shuricksumy/wled-gateway-addon",
-  "arch": ["aarch64", "amd64", "armhf", "armv7", "i386"],
+  "image": "ghcr.io/shuricksumy/wled-gateway-addon-wled_gateway-{arch}",
+  "arch": ["aarch64", "amd64", "armv7"],
   "init": false,
   "ingress": true,
   "ingress_port": 8099,
@@ -25,11 +26,7 @@
   },
   "schema": {
     "devices": [
-      {
-        "id": "str",
-        "name": "str",
-        "ip": "str"
-      }
+      {"id": "str", "name": "str", "ip": "str"}
     ]
   }
 }

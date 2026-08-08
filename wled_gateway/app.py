@@ -312,8 +312,50 @@ async def handle_devices(request):
     return web.json_response(DEVICES)
 
 
+INDEX_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>WLED Gateway</title>
+  <style>
+    body {{ font-family: sans-serif; background: #111; color: #eee; margin: 2em; }}
+    h1 {{ font-weight: 500; }}
+    code, pre {{ background: #222; padding: 0.3em 0.5em; border-radius: 4px; }}
+    pre {{ overflow-x: auto; }}
+    table {{ border-collapse: collapse; margin-top: 1em; width: 100%; }}
+    th, td {{ text-align: left; padding: 0.4em 0.8em; border-bottom: 1px solid #333; }}
+    button {{ margin-left: 0.5em; cursor: pointer; }}
+  </style>
+</head>
+<body>
+  <h1>WLED Gateway</h1>
+  <p>This is the base path your Lovelace iframe card URLs need. It's
+  detected live from how this page itself was loaded, so it's always
+  correct — even after a reinstall changes the Ingress token.</p>
+  <pre id="base">{ingress_path}</pre>
+  <button onclick="navigator.clipboard.writeText(document.getElementById('base').textContent)">Copy</button>
+
+  <h2>Configured devices</h2>
+  <table>
+    <tr><th>ID</th><th>Name</th><th>IP</th><th>Preview card URL</th></tr>
+    {rows}
+  </table>
+</body>
+</html>
+"""
+
+
 async def handle_index(request):
-    raise web.HTTPFound("preview?wled=1")
+    ingress_path = request.headers.get("X-Ingress-Path", "")
+    rows = "\\n".join(
+        f"<tr><td>{dev_id}</td><td>{dev['name']}</td><td>{dev['ip']}</td>"
+        f"<td><code>{ingress_path}/preview?wled={dev_id}</code></td></tr>"
+        for dev_id, dev in DEVICES.items()
+    )
+    return web.Response(
+        text=INDEX_HTML.format(ingress_path=ingress_path, rows=rows),
+        content_type="text/html",
+    )
 
 
 async def on_startup(app):

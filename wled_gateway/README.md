@@ -76,21 +76,66 @@ in `config.json`), which gives it a `SUPERVISOR_TOKEN` to call
 
 ## Finding your Ingress URL
 
-Open the add-on's **Web UI** once. The address bar will show something like:
+Open the add-on's **Web UI** — the add-on's own home page shows exactly the
+base path your Lovelace cards need, plus a ready-made preview URL for every
+configured device, with a copy button. It's generated fresh on every page
+load (via the `X-Ingress-Path` header Supervisor sends), so it's always
+correct — open it any time you need the current value, including right
+after a reinstall changes the token.
+
+If you'd rather read it straight from the browser: the address bar shows
+something like:
 
 ```
-http://<your-ha-host>:8123/api/hassio_ingress/XNz5xsTmUGB2MDuohydZUuYi_FVGtRkiTQt3kFHstI8/
+http://<your-ha-host>:8123/api/hassio_ingress/<token>/
 ```
 
-The `/api/hassio_ingress/<token>/` part is what your Lovelace cards need —
-copy it as your base path for the examples below. This token is assigned
-once per install; if you ever uninstall and reinstall the add-on, it
-changes and your card URLs need updating.
+The `/api/hassio_ingress/<token>/` part is what your Lovelace cards need.
+This token is assigned once per install; if you ever uninstall and
+reinstall the add-on, it changes and your card URLs need updating (or see
+"Avoiding hardcoded tokens" below to sidestep that entirely).
 
 Because it's a relative, same-origin path, it works identically whether
 you're viewing the dashboard on your LAN, through a local domain, or from
 outside via an external tunnel — no separate configuration per access
 method.
+
+## Avoiding hardcoded tokens in your cards
+
+Since the Ingress token changes if you ever reinstall the add-on, hardcoding
+it into every card means updating every card by hand when that happens. If
+you have the [config-template-card](https://github.com/iantrich/config-template-card)
+HACS card installed, you can make it a single source of truth instead:
+
+1. Add an `input_text` helper to hold the base path:
+
+```yaml
+# input_text.yaml (or your own input_texts include)
+wled_ingress_base:
+  name: WLED Gateway Ingress Base Path
+  max: 255
+  initial: /api/hassio_ingress/your-token-here
+```
+
+2. Wrap each iframe card in `config-template-card`, templating the URL from
+   that helper instead of hardcoding it:
+
+```yaml
+type: custom:config-template-card
+variables:
+  BASE: states['input_text.wled_ingress_base'].state
+entities:
+  - input_text.wled_ingress_base
+card:
+  type: iframe
+  url: ${BASE + '/preview?wled=1'}
+  aspect_ratio: 5%
+  title: null
+```
+
+Now, whenever the token changes, update the one `input_text` value (via
+Developer Tools → States, or its own card) and every card picks it up
+automatically — no hunting through dashboards.
 
 ## Endpoints
 

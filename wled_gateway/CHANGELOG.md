@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.1
+- The Configuration tab now reads as English instead of raw schema keys:
+  `auto_create_helpers` and every field in the Add-device dialog (ID, Name,
+  IP address, Effect dropdown) has a proper label and an explanation.
+- The effect dropdown field spells out that it should normally be left empty,
+  since one is created for you from the device ID.
+
 ## 1.5.0
 - Effect helpers are now created for you. Adding a device no longer means
   hand-creating a matching `input_select` and typing its entity id into the

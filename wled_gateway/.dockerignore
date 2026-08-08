@@ -4,6 +4,7 @@ __pycache__
 # Only app.py is copied into the image; everything below is repo/store-facing
 # and would otherwise be uploaded as build context on every CI build.
 screenshots/
+translations/
 icon.png
 logo.png
 README.md

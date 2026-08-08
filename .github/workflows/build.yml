@@ -23,6 +23,34 @@ jobs:
         run: python3 -m py_compile wled_gateway/app.py
       - name: Check config.json is valid JSON
         run: python3 -c "import json; json.load(open('wled_gateway/config.json'))"
+      - name: Check every config option has a translation
+        # Untranslated options show up in the add-on UI as bare schema keys, and
+        # translations for keys that don't exist are ignored without complaint —
+        # both fail quietly, so check them here.
+        run: |
+          pip install --quiet pyyaml
+          python3 - <<'PY'
+          import json, sys, yaml
+          schema = json.load(open("wled_gateway/config.json"))["schema"]
+          trans = yaml.safe_load(open("wled_gateway/translations/en.yaml"))["configuration"]
+          problems = []
+          for key, spec in schema.items():
+              if key not in trans:
+                  problems.append(f"untranslated option: {key}")
+                  continue
+              # a list-of-dicts option (like devices) labels its sub-fields under "fields"
+              inner = spec[0] if isinstance(spec, list) and spec and isinstance(spec[0], dict) else None
+              if inner:
+                  fields = (trans[key] or {}).get("fields") or {}
+                  problems += [f"untranslated field: {key}.{f}" for f in inner if f not in fields]
+                  problems += [f"orphan field: {key}.{f}" for f in fields if f not in inner]
+          problems += [f"orphan option: {k}" for k in trans if k not in schema]
+          if problems:
+              for p in problems:
+                  print(f"::error::translations/en.yaml out of sync — {p}")
+              sys.exit(1)
+          print("every config option and device field is translated")
+          PY
       - name: Check CHANGELOG documents the current version
         # Images are tagged with the config.json version, so shipping a change
         # without bumping it silently overwrites an already-published tag and

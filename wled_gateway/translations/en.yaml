@@ -1,0 +1,33 @@
+configuration:
+  auto_create_helpers:
+    name: Create effect dropdowns automatically
+    description: >-
+      Creates an effect dropdown in Home Assistant for every device that
+      doesn't name one below — called input_select.wled_effect_<id> and kept
+      filled with that device's real effect list. Dropdowns you already have
+      are never changed. Turn this off to create and name them yourself.
+  devices:
+    name: WLED devices
+    description: >-
+      One entry per WLED device. Restart the add-on after changing this list.
+    fields:
+      id:
+        name: ID
+        description: >-
+          Short reference used in your dashboard card URLs, e.g. 1 gives
+          ?wled=1. Any short value works and it doesn't have to match anything
+          in Home Assistant.
+      name:
+        name: Name
+        description: >-
+          A label for your own reference, shown on the add-on's own page.
+      ip:
+        name: IP address
+        description: >-
+          The device's address on your network, e.g. 192.168.1.50.
+      input_select:
+        name: Effect dropdown (optional)
+        description: >-
+          Leave this empty — a dropdown is created for you automatically, named
+          input_select.wled_effect_<id> from the ID above. Only fill it in to
+          reuse a dropdown you already have under a different name.

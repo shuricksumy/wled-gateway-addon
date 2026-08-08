@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 
 from aiohttp import ClientSession, WSMsgType, web
@@ -9,6 +10,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("wled-gateway")
 
 OPTIONS_PATH = Path("/data/options.json")
+HA_API = "http://supervisor/core/api"
+SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
 
 # One place for everything WLED-preview related, run as a Home Assistant
 # add-on with Ingress enabled. Because Ingress traffic is proxied through
@@ -28,7 +31,11 @@ def load_devices():
     devices = {}
     for dev in options.get("devices", []):
         dev_id = str(dev["id"])
-        devices[dev_id] = {"name": dev.get("name", dev_id), "ip": dev["ip"]}
+        devices[dev_id] = {
+            "name": dev.get("name", dev_id),
+            "ip": dev["ip"],
+            "input_select": dev.get("input_select"),
+        }
     return devices
 
 
@@ -199,13 +206,45 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
 """
 
 
-async def upstream_loop(app, dev_id, ip):
+async def sync_effect_list(app, dev_id, ip, input_select_entity):
+    """Push the device's real, current effect list into an HA input_select's
+    options, so dashboard dropdowns never go stale. Skipped if no
+    input_select was configured for this device."""
+    if not input_select_entity:
+        return
+    if not SUPERVISOR_TOKEN:
+        log.warning("no SUPERVISOR_TOKEN available; enable homeassistant_api to sync effect lists")
+        return
+    try:
+        async with app["session"].get(f"http://{ip}/json/effects", timeout=5) as resp:
+            effects = await resp.json()
+    except Exception as e:
+        log.warning("could not fetch effect list from %s (%s): %s", dev_id, ip, e)
+        return
+
+    headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}", "Content-Type": "application/json"}
+    payload = {"entity_id": input_select_entity, "options": effects}
+    try:
+        async with app["session"].post(
+            f"{HA_API}/services/input_select/set_options", json=payload, headers=headers, timeout=5
+        ) as resp:
+            if resp.status >= 300:
+                text = await resp.text()
+                log.warning("HA set_options failed for %s: %s %s", input_select_entity, resp.status, text)
+            else:
+                log.info("synced %d effects to %s", len(effects), input_select_entity)
+    except Exception as e:
+        log.warning("could not reach HA API to sync %s: %s", input_select_entity, e)
+
+
+async def upstream_loop(app, dev_id, ip, input_select_entity):
     backoff = 1
     while True:
         try:
             async with app["session"].ws_connect(f"ws://{ip}/ws", heartbeat=20) as ws:
                 log.info("upstream connected: %s (%s)", dev_id, ip)
                 await ws.send_str("{'lv':true}")
+                await sync_effect_list(app, dev_id, ip, input_select_entity)
                 backoff = 1
                 async for msg in ws:
                     if msg.type == WSMsgType.BINARY:
@@ -275,7 +314,8 @@ async def handle_index(request):
 async def on_startup(app):
     app["session"] = ClientSession()
     app["upstream_tasks"] = [
-        asyncio.create_task(upstream_loop(app, dev_id, dev["ip"])) for dev_id, dev in DEVICES.items()
+        asyncio.create_task(upstream_loop(app, dev_id, dev["ip"], dev.get("input_select")))
+        for dev_id, dev in DEVICES.items()
     ]
 
 

@@ -1,6 +1,6 @@
 {
   "name": "WLED Gateway",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "slug": "wled_gateway",
   "description": "Single endpoint for WLED live-preview: holds the one live-view connection each WLED device allows and fans it out to multiple dashboard viewers at once.",
   "url": "https://github.com/shuricksumy/wled-gateway-addon",
@@ -12,21 +12,22 @@
   "panel_icon": "mdi:led-strip-variant",
   "panel_title": "WLED Gateway",
   "panel_admin": false,
+  "homeassistant_api": true,
   "stage": "stable",
   "startup": "application",
   "boot": "auto",
   "options": {
     "devices": [
-      {"id": "1", "name": "Sasha", "ip": "192.168.111.161"},
-      {"id": "2", "name": "Misha", "ip": "192.168.111.162"},
-      {"id": "3", "name": "Matrix", "ip": "192.168.111.163"},
-      {"id": "4", "name": "line-L", "ip": "192.168.111.29"},
-      {"id": "5", "name": "line-R", "ip": "192.168.111.30"}
+      {"id": "1", "name": "Living Room", "ip": "192.0.2.11", "input_select": "input_select.wled_effect_1"},
+      {"id": "2", "name": "Bedroom", "ip": "192.0.2.12", "input_select": "input_select.wled_effect_2"},
+      {"id": "3", "name": "Matrix", "ip": "192.0.2.13", "input_select": "input_select.wled_effect_matrix"},
+      {"id": "4", "name": "Strip Left", "ip": "192.0.2.14", "input_select": "input_select.wled_effect_left"},
+      {"id": "5", "name": "Strip Right", "ip": "192.0.2.15", "input_select": "input_select.wled_effect_right"}
     ]
   },
   "schema": {
     "devices": [
-      {"id": "str", "name": "str", "ip": "str"}
+      {"id": "str", "name": "str", "ip": "str", "input_select": "str?"}
     ]
   }
 }

@@ -10,6 +10,9 @@ Runs with Ingress enabled, so it's reachable through Home Assistant itself —
 local IP, local domain, external tunnel — with no separate networking,
 reverse proxy, or port forwarding to set up.
 
+It also keeps any `input_select` effect dropdowns in your dashboard synced
+to each device's real, live effect list — no separate automation needed.
+
 ## Configuration
 
 Go to the add-on's **Configuration** tab and list your devices:
@@ -17,11 +20,13 @@ Go to the add-on's **Configuration** tab and list your devices:
 ```yaml
 devices:
   - id: "1"
-    name: Sasha
-    ip: 192.168.111.161
+    name: Living Room
+    ip: 192.0.2.11
+    input_select: input_select.wled_effect_1
   - id: "2"
     name: Matrix
-    ip: 192.168.111.163
+    ip: 192.0.2.13
+    input_select: input_select.wled_effect_matrix
 ```
 
 - `id` — whatever short string you want; it's what you'll reference from
@@ -29,8 +34,45 @@ devices:
   Assistant.
 - `name` — for your own reference, not used anywhere functionally yet.
 - `ip` — the WLED device's LAN IP.
+- `input_select` — optional. The entity ID of an `input_select` helper in
+  Home Assistant whose `options` you want kept in sync with this device's
+  real effect list. Omit it if you don't have one for this device.
 
 Restart the add-on after changing the list.
+
+## Effect list sync
+
+WLED's own HA integration doesn't expose a native "effect" select entity —
+only `light.turn_on` with an `effect:` parameter. A common workaround is an
+`input_select` helper (populated with effect names) plus an automation that
+applies the chosen value:
+
+```yaml
+# automations.yaml — apply the picked effect (one per device)
+- alias: Set Effect - Living Room
+  triggers:
+    - trigger: state
+      entity_id: input_select.wled_effect_1
+  actions:
+    - action: light.turn_on
+      target:
+        entity_id: light.wled_living_room
+      data:
+        effect: "{{ states('input_select.wled_effect_1') }}"
+  mode: single
+```
+
+The `input_select`'s `options` still need to come from somewhere real, or
+the dropdown just shows whatever was typed in by hand and drifts out of
+date. That's what this add-on now does for you: on connecting (and
+reconnecting) to each device, it fetches the device's actual effect list
+directly (`GET /json/effects`) and pushes it into the configured
+`input_select` via Home Assistant's own API
+(`input_select.set_options`) — no automation required for this part.
+
+This needs the add-on's `homeassistant_api: true` permission (already set
+in `config.json`), which gives it a `SUPERVISOR_TOKEN` to call
+`http://supervisor/core/api/...` on Home Assistant's behalf.
 
 ## Finding your Ingress URL
 
@@ -62,14 +104,16 @@ method.
 
 ## Lovelace card examples
 
-Replace `INGRESS` below with your actual `/api/hassio_ingress/<token>` path.
+All examples below use synthetic device names/IPs matching the
+Configuration example above. Replace `INGRESS` with your actual
+`/api/hassio_ingress/<token>` path.
 
 **Basic strip preview**, shown only while the light is on:
 
 ```yaml
 type: conditional
 conditions:
-  - entity: light.wled
+  - entity: light.wled_living_room
     state: "on"
 card:
   type: iframe
@@ -78,22 +122,221 @@ card:
   title: null
 ```
 
-**2D matrix preview:**
+**Full strip device card** — live preview plus Home Assistant's own WLED
+integration entities (current draw / LED count / IP chips, power / sync /
+restart controls, effect + palette selects, brightness/color, intensity and
+speed sliders):
 
 ```yaml
-type: conditional
-conditions:
-  - entity: light.wled_matrix
-    state: "on"
-card:
-  type: iframe
-  url: INGRESS/preview2d?wled=3
-  aspect_ratio: 50%
-  title: null
+type: vertical-stack
+cards:
+  - type: custom:mushroom-title-card
+    title: W L E D - LIVING ROOM
+    alignment: center
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: entity
+        entity: sensor.wled_living_room_estimated_current
+        icon: mdi:flash-triangle-outline
+      - type: entity
+        entity: sensor.wled_living_room_led_count
+        icon: mdi:led-on
+      - type: entity
+        entity: sensor.wled_living_room_ip
+        tap_action:
+          action: url
+          url_path: http://192.0.2.11
+    alignment: center
+  - type: conditional
+    conditions:
+      - entity: light.wled_living_room
+        state: "on"
+    card:
+      type: iframe
+      url: INGRESS/preview?wled=1
+      aspect_ratio: 5%
+      title: null
+  - square: false
+    type: grid
+    columns: 4
+    cards:
+      - type: custom:mushroom-template-card
+        icon: mdi:power
+        icon_color: >-
+          {% if is_state('light.wled_living_room', 'on') %}green{% else %}#5A5A5A{% endif %}
+        entity: light.wled_living_room
+        tap_action:
+          action: toggle
+      - type: custom:mushroom-template-card
+        icon: mdi:upload-network-outline
+        icon_color: >-
+          {% if is_state('switch.wled_living_room_sync_send', 'on') %}green{% else %}#5A5A5A{% endif %}
+        entity: switch.wled_living_room_sync_send
+        tap_action:
+          action: call-service
+          service: switch.toggle
+          target:
+            entity_id: switch.wled_living_room_sync_send
+      - type: custom:mushroom-template-card
+        icon: mdi:download-network
+        icon_color: >-
+          {% if is_state('switch.wled_living_room_sync_receive', 'on') %}green{% else %}#5A5A5A{% endif %}
+        entity: switch.wled_living_room_sync_receive
+        tap_action:
+          action: call-service
+          service: switch.toggle
+          target:
+            entity_id: switch.wled_living_room_sync_receive
+      - type: custom:mushroom-template-card
+        icon: mdi:restart
+        icon_color: red
+        entity: button.wled_living_room_restart
+  - square: false
+    type: grid
+    columns: 2
+    cards:
+      - type: custom:mushroom-select-card
+        entity: input_select.wled_effect_1
+        icon: mdi:waveform
+      - type: custom:mushroom-select-card
+        entity: select.wled_living_room_color_palette
+  - type: custom:mushroom-light-card
+    entity: light.wled_living_room
+    show_color_control: true
+    show_brightness_control: true
+  - square: false
+    type: grid
+    columns: 1
+    cards:
+      - type: custom:mushroom-number-card
+        entity: number.wled_living_room_intensity
+        display_mode: slider
+        icon: mdi:arrow-split-vertical
+      - type: custom:mushroom-number-card
+        entity: number.wled_living_room_speed
+        display_mode: slider
+        icon: mdi:speedometer
 ```
 
-**Rotated strip** (e.g. a vertical strip mounted on a wall, wired as device
-id 4), sized for a tall narrow card via `grid_options`:
+**2D matrix device card** — same idea, using `/preview2d` and the
+matrix-specific reverse/nightlight switches:
+
+```yaml
+type: vertical-stack
+cards:
+  - type: custom:mushroom-title-card
+    title: W L E D - MATRIX
+    alignment: center
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: entity
+        entity: sensor.wled_matrix_estimated_current
+        icon: mdi:flash-triangle-outline
+      - type: entity
+        entity: sensor.wled_matrix_led_count
+        icon: mdi:led-on
+      - type: entity
+        entity: sensor.wled_matrix_ip
+        tap_action:
+          action: url
+          url_path: http://192.0.2.13
+    alignment: center
+  - type: conditional
+    conditions:
+      - entity: light.wled_matrix
+        state: "on"
+    card:
+      type: iframe
+      url: INGRESS/preview2d?wled=3
+      aspect_ratio: 51%
+      title: null
+  - square: false
+    type: grid
+    columns: 6
+    cards:
+      - type: custom:mushroom-template-card
+        icon: mdi:power
+        icon_color: >-
+          {% if is_state('light.wled_matrix', 'on') %}green{% else %}#5A5A5A{% endif %}
+        entity: light.wled_matrix
+        tap_action:
+          action: toggle
+      - type: custom:mushroom-template-card
+        icon: mdi:compare-horizontal
+        icon_color: >-
+          {% if is_state('switch.wled_matrix_reverse', 'on') %}green{% else %}#5A5A5A{% endif %}
+        entity: switch.wled_matrix_reverse
+        tap_action:
+          action: call-service
+          service: switch.toggle
+          target:
+            entity_id: switch.wled_matrix_reverse
+      - type: custom:mushroom-template-card
+        icon: mdi:weather-night
+        icon_color: >-
+          {% if is_state('switch.wled_matrix_nightlight', 'on') %}green{% else %}#5A5A5A{% endif %}
+        entity: switch.wled_matrix_nightlight
+        tap_action:
+          action: call-service
+          service: switch.toggle
+          target:
+            entity_id: switch.wled_matrix_nightlight
+      - type: custom:mushroom-template-card
+        icon: mdi:upload-network-outline
+        icon_color: >-
+          {% if is_state('switch.wled_matrix_sync_send', 'on') %}green{% else %}#5A5A5A{% endif %}
+        entity: switch.wled_matrix_sync_send
+        tap_action:
+          action: call-service
+          service: switch.toggle
+          target:
+            entity_id: switch.wled_matrix_sync_send
+      - type: custom:mushroom-template-card
+        icon: mdi:download-network
+        icon_color: >-
+          {% if is_state('switch.wled_matrix_sync_receive', 'on') %}green{% else %}#5A5A5A{% endif %}
+        entity: switch.wled_matrix_sync_receive
+        tap_action:
+          action: call-service
+          service: switch.toggle
+          target:
+            entity_id: switch.wled_matrix_sync_receive
+      - type: custom:mushroom-template-card
+        icon: mdi:restart
+        icon_color: red
+        entity: button.wled_matrix_restart
+  - square: false
+    type: grid
+    columns: 2
+    cards:
+      - type: custom:mushroom-select-card
+        entity: input_select.wled_effect_matrix
+        icon: mdi:waveform
+      - type: custom:mushroom-select-card
+        entity: select.wled_matrix_color_palette
+  - type: custom:mushroom-light-card
+    entity: light.wled_matrix
+    show_color_control: true
+    show_brightness_control: true
+  - square: false
+    type: grid
+    columns: 1
+    cards:
+      - type: custom:mushroom-number-card
+        entity: number.wled_matrix_intensity
+        display_mode: slider
+        icon: mdi:arrow-split-vertical
+      - type: custom:mushroom-number-card
+        entity: number.wled_matrix_speed
+        display_mode: slider
+        icon: mdi:speedometer
+```
+
+**Rotated strip card** (e.g. a vertical strip mounted on a wall, wired as
+device id 4) — compact wall-panel style: the rotated preview as one card,
+plus a separate light card next to it in the same section.
+
+Preview card:
 
 ```yaml
 type: horizontal-stack
@@ -106,43 +349,17 @@ grid_options:
   rows: 7
 ```
 
-**Full device card** combining the live preview with Home Assistant's own
-WLED integration entities (chips for current draw / LED count / IP,
-power/effect/palette controls) — this is the layout used for each device on
-a "one card per WLED device" dashboard:
+Light card, placed alongside it in the same grid section:
 
 ```yaml
-type: vertical-stack
-cards:
-  - type: custom:mushroom-title-card
-    title: W L E D - 1
-    alignment: center
-  - type: custom:mushroom-chips-card
-    chips:
-      - type: entity
-        entity: sensor.wled_estimated_current
-        icon: mdi:flash-triangle-outline
-      - type: entity
-        entity: sensor.wled_led_count
-        icon: mdi:led-on
-      - type: entity
-        entity: sensor.wled_ip
-        tap_action:
-          action: url
-          url_path: http://192.168.111.161
-    alignment: center
-  - type: conditional
-    conditions:
-      - entity: light.wled
-        state: "on"
-    card:
-      type: iframe
-      url: INGRESS/preview?wled=1
-      aspect_ratio: 5%
-      title: null
-  - type: custom:mushroom-select-card
-    entity: select.wled_color_palette
-    icon: mdi:waveform
+type: custom:mushroom-light-card
+entity: light.wled_strip_left
+show_color_control: false
+show_brightness_control: true
+icon: mdi:alpha-l
+grid_options:
+  columns: 8
+  rows: 1
 ```
 
 ## Troubleshooting
@@ -156,3 +373,8 @@ cards:
   device's IP in Configuration is wrong or it's unreachable.
 - **Card 404s after reinstalling the add-on** — the Ingress token changed;
   grab the new one from the Web UI and update your card URLs.
+- **Effect dropdown never populates** — check the add-on's log for `synced
+  N effects to input_select...`. If you instead see `HA set_options
+  failed`, confirm the `input_select` entity ID in Configuration is exactly
+  right and that `homeassistant_api: true` is present in the installed
+  version's `config.json`.

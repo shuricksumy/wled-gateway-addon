@@ -455,8 +455,7 @@ to taste. A full example combining two of these (flanking a media player
 card) with a 2D matrix preview and light-card/gear-button widgets for each
 device below:
 
-*(screenshot: three-panel DJ layout — vertical strip, matrix preview,
-vertical strip, with L/Matrix/R light controls beneath)*
+![Full-height vertical strips flanking a 2D matrix preview, with light-card and gear-button widgets for each device below](screenshots/dj-widget.png)
 
 ```yaml
 type: grid

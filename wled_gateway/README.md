@@ -1,4 +1,8 @@
-# WLED Gateway
+# 🌈 WLED Gateway
+
+[![Build](https://github.com/shuricksumy/wled-gateway-addon/actions/workflows/build.yml/badge.svg)](https://github.com/shuricksumy/wled-gateway-addon/actions/workflows/build.yml)
+[![Ingress](https://img.shields.io/badge/Ingress-enabled-success)](https://developers.home-assistant.io/docs/add-ons/presentation#ingress)
+[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64%20%7C%20armv7-blue)](../README.md#-published-images)
 
 WLED's own live-preview WebSocket only streams to whichever client asked for
 it most recently — every new viewer steals the feed from the last one. This

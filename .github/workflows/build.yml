@@ -9,7 +9,17 @@ on:
   workflow_dispatch:
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check app.py compiles
+        run: python3 -m py_compile wled_gateway/app.py
+      - name: Check config.json is valid JSON
+        run: python3 -c "import json; json.load(open('wled_gateway/config.json'))"
+
   build:
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -1,0 +1,5 @@
+{
+  "devices": [
+    {"id": "1", "name": "Test Device", "ip": "192.0.2.11", "input_select": "input_select.wled_effect_1"}
+  ]
+}

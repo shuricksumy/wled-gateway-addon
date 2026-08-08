@@ -11,7 +11,13 @@ local IP, local domain, external tunnel — with no separate networking,
 reverse proxy, or port forwarding to set up.
 
 It also keeps any `input_select` effect dropdowns in your dashboard synced
-to each device's real, live effect list — no separate automation needed.
+to each device's real, live effect list — no separate automation needed,
+and it can proxy each device's own admin web UI so you can open or embed it
+directly from Home Assistant for setup and debugging.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for release history, and
+[`../DEVELOPMENT.md`](../DEVELOPMENT.md) if you're changing this add-on
+yourself and want a faster test loop than a full Supervisor install cycle.
 
 ## Configuration
 
@@ -145,7 +151,32 @@ automatically — no hunting through dashboards.
 | `/preview2d?wled=<id>` | 2D preview — a dot-matrix canvas, for matrix/panel devices. |
 | `/ws/<id>` | Raw relay WebSocket, if you're building your own frontend instead of using the built-in pages. |
 | `/json/<id>/live` | Passthrough to the device's own `/json/live` HTTP endpoint. |
-| `/devices` | JSON list of configured devices, for debugging. |
+| `/devices` | JSON list of configured devices and live connection status, for debugging. |
+| `/device/<id>/` | Reverse proxy for the device's own admin web UI — open it directly, or embed it in a card (see below). |
+
+## Device web UI (setup & debugging)
+
+Each device's own WLED admin interface is reachable at `/device/<id>/` —
+linked directly from the add-on's info page (the "Open" link per device).
+Useful for changing settings, checking logs, or debugging a device without
+leaving Home Assistant or hunting down its raw IP.
+
+It can also go straight into a Lovelace card:
+
+```yaml
+type: iframe
+url: INGRESS/device/1/
+aspect_ratio: 150%
+title: null
+```
+
+**Known limitation**: WLED's own web UI wasn't built to run under a URL
+sub-path, so if any of its assets or internal API calls use absolute
+(leading-slash) paths, those specific requests will miss the proxy. Most of
+the interface loads and works fine since it's largely relative-path based;
+the most likely thing to not fully work is its own internal WebSocket for
+live state updates. If something looks broken, opening the device's raw IP
+directly is always the fallback.
 
 ## Lovelace card examples
 

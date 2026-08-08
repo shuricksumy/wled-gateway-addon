@@ -1,2 +1,3 @@
 __pycache__/
 *.pyc
+wled_gateway/dev-options.json

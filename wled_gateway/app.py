@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 from aiohttp import ClientSession, WSMsgType, web
@@ -41,6 +42,7 @@ def load_devices():
 
 DEVICES = load_devices()
 subscribers = {dev_id: set() for dev_id in DEVICES}
+device_status = {dev_id: {"connected": False, "last_connected_at": None} for dev_id in DEVICES}
 
 PREVIEW_HTML = """<!DOCTYPE html>
 <html>
@@ -248,6 +250,8 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
         try:
             async with app["session"].ws_connect(f"ws://{ip}/ws", heartbeat=20) as ws:
                 log.info("upstream connected: %s (%s)", dev_id, ip)
+                device_status[dev_id]["connected"] = True
+                device_status[dev_id]["last_connected_at"] = time.time()
                 await ws.send_str("{'lv':true}")
                 await sync_effect_list(app, dev_id, ip, input_select_entity)
                 backoff = 1
@@ -265,6 +269,7 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                         break
         except Exception as e:
             log.warning("upstream %s (%s) dropped: %s", dev_id, ip, e)
+        device_status[dev_id]["connected"] = False
         await asyncio.sleep(backoff)
         backoff = min(backoff * 2, 30)
 
@@ -309,7 +314,89 @@ async def handle_preview2d(request):
 
 
 async def handle_devices(request):
-    return web.json_response(DEVICES)
+    return web.json_response({
+        dev_id: {**dev, "connected": device_status[dev_id]["connected"]}
+        for dev_id, dev in DEVICES.items()
+    })
+
+
+HOP_BY_HOP_HEADERS = {"host", "content-length", "content-encoding", "transfer-encoding", "connection"}
+
+
+async def handle_device_root_redirect(request):
+    dev_id = request.match_info["id"]
+    if dev_id not in DEVICES:
+        raise web.HTTPNotFound()
+    ingress_path = request.headers.get("X-Ingress-Path", "")
+    raise web.HTTPFound(f"{ingress_path}/device/{dev_id}/")
+
+
+async def proxy_device_websocket(request, ip, subpath):
+    ws_client = web.WebSocketResponse()
+    await ws_client.prepare(request)
+    try:
+        async with request.app["session"].ws_connect(f"ws://{ip}/{subpath}") as ws_upstream:
+
+            async def pump_upstream():
+                async for msg in ws_upstream:
+                    if msg.type == WSMsgType.TEXT:
+                        await ws_client.send_str(msg.data)
+                    elif msg.type == WSMsgType.BINARY:
+                        await ws_client.send_bytes(msg.data)
+                    elif msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR):
+                        break
+
+            pump_task = asyncio.create_task(pump_upstream())
+            try:
+                async for msg in ws_client:
+                    if msg.type == WSMsgType.TEXT:
+                        await ws_upstream.send_str(msg.data)
+                    elif msg.type == WSMsgType.BINARY:
+                        await ws_upstream.send_bytes(msg.data)
+            finally:
+                pump_task.cancel()
+    except Exception as e:
+        log.warning("device UI websocket proxy error for %s: %s", ip, e)
+    return ws_client
+
+
+async def handle_device_proxy(request):
+    """Reverse-proxies a WLED device's own admin web UI, so it can be opened
+    or embedded directly from Home Assistant for setup/debugging — no need
+    to separately find and visit the device's raw IP.
+
+    Best-effort: WLED's UI wasn't built to run under a URL sub-path, so if
+    it hardcodes any absolute (leading-slash) asset or API paths, those
+    specific requests will miss this proxy. Most of the UI is served from
+    relative paths and works fine; live state updates over its own internal
+    WebSocket are the most likely thing to not fully work through the proxy.
+    """
+    dev_id = request.match_info["id"]
+    subpath = request.match_info.get("path", "")
+    dev = DEVICES.get(dev_id)
+    if not dev:
+        raise web.HTTPNotFound()
+    ip = dev["ip"]
+
+    if request.headers.get("Upgrade", "").lower() == "websocket":
+        return await proxy_device_websocket(request, ip, subpath)
+
+    upstream_url = f"http://{ip}/{subpath}"
+    if request.query_string:
+        upstream_url += f"?{request.query_string}"
+
+    body = await request.read()
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP_HEADERS}
+    try:
+        async with request.app["session"].request(
+            request.method, upstream_url, data=body, headers=headers, timeout=15, allow_redirects=False
+        ) as resp:
+            resp_body = await resp.read()
+            out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP_HEADERS}
+            return web.Response(status=resp.status, body=resp_body, headers=out_headers)
+    except Exception as e:
+        log.warning("device UI proxy error for %s (%s): %s", dev_id, ip, e)
+        raise web.HTTPBadGateway(text=f"Could not reach device at {ip}")
 
 
 INDEX_HTML = """<!DOCTYPE html>
@@ -325,6 +412,10 @@ INDEX_HTML = """<!DOCTYPE html>
     table {{ border-collapse: collapse; margin-top: 1em; width: 100%; }}
     th, td {{ text-align: left; padding: 0.4em 0.8em; border-bottom: 1px solid #333; }}
     button {{ margin-left: 0.5em; cursor: pointer; }}
+    a {{ color: #7bc9ff; }}
+    .dot {{ display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.4em; }}
+    .dot.on {{ background: #4caf50; }}
+    .dot.off {{ background: #b33; }}
   </style>
 </head>
 <body>
@@ -337,7 +428,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
   <h2>Configured devices</h2>
   <table>
-    <tr><th>ID</th><th>Name</th><th>IP</th><th>Preview card URL</th></tr>
+    <tr><th>Status</th><th>ID</th><th>Name</th><th>IP</th><th>Preview card URL</th><th>Device Web UI</th></tr>
     {rows}
   </table>
 </body>
@@ -347,11 +438,19 @@ INDEX_HTML = """<!DOCTYPE html>
 
 async def handle_index(request):
     ingress_path = request.headers.get("X-Ingress-Path", "")
-    rows = "".join(
-        f"<tr><td>{dev_id}</td><td>{dev['name']}</td><td>{dev['ip']}</td>"
-        f"<td><code>{ingress_path}/preview?wled={dev_id}</code></td></tr>"
-        for dev_id, dev in DEVICES.items()
-    )
+
+    def row(dev_id, dev):
+        connected = device_status[dev_id]["connected"]
+        dot_class = "on" if connected else "off"
+        dot_title = "connected" if connected else "not connected"
+        return (
+            f"<tr><td><span class='dot {dot_class}' title='{dot_title}'></span>{dot_title}</td>"
+            f"<td>{dev_id}</td><td>{dev['name']}</td><td>{dev['ip']}</td>"
+            f"<td><code>{ingress_path}/preview?wled={dev_id}</code></td>"
+            f"<td><a href='{ingress_path}/device/{dev_id}/' target='_blank'>Open</a></td></tr>"
+        )
+
+    rows = "".join(row(dev_id, dev) for dev_id, dev in DEVICES.items())
     return web.Response(
         text=INDEX_HTML.format(ingress_path=ingress_path, rows=rows),
         content_type="text/html",
@@ -379,6 +478,8 @@ app.router.add_get("/preview2d", handle_preview2d)
 app.router.add_get("/ws/{id}", handle_ws)
 app.router.add_get("/json/{id}/live", handle_json_live)
 app.router.add_get("/devices", handle_devices)
+app.router.add_get("/device/{id}", handle_device_root_redirect)
+app.router.add_route("*", "/device/{id}/{path:.*}", handle_device_proxy)
 app.on_startup.append(on_startup)
 app.on_cleanup.append(on_cleanup)
 

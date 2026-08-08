@@ -121,11 +121,16 @@ HACS card installed, you can make it a single source of truth instead:
 
 ```yaml
 # input_text.yaml (or your own input_texts include)
-wled_ingress_base:
-  name: WLED Gateway Ingress Base Path
+wled_base_url:
+  name: WLED Base URL
   max: 255
   initial: /api/hassio_ingress/your-token-here
 ```
+
+Create it either by adding that YAML and restarting Home Assistant, or via
+**Settings → Devices & Services → Helpers → + Create Helper → Text**, name
+it "WLED Base URL", and paste in your current Ingress path (found on this
+add-on's own info page) as its value.
 
 2. Wrap each iframe card in `config-template-card`, templating the URL from
    that helper instead of hardcoding it:
@@ -133,12 +138,12 @@ wled_ingress_base:
 ```yaml
 type: custom:config-template-card
 variables:
-  BASE: states['input_text.wled_ingress_base'].state
+  WLED_BASE_URL: states['input_text.wled_base_url'].state
 entities:
-  - input_text.wled_ingress_base
+  - input_text.wled_base_url
 card:
   type: iframe
-  url: ${BASE + '/preview?wled=1'}
+  url: ${WLED_BASE_URL + '/preview?wled=1'}
   aspect_ratio: 5%
   title: null
 ```
@@ -172,12 +177,12 @@ It can also go straight into a Lovelace card:
 ```yaml
 type: custom:config-template-card
 variables:
-  BASE: states['input_text.wled_ingress_base'].state
+  WLED_BASE_URL: states['input_text.wled_base_url'].state
 entities:
-  - input_text.wled_ingress_base
+  - input_text.wled_base_url
 card:
   type: iframe
-  url: ${BASE + '/device/1'}
+  url: ${WLED_BASE_URL + '/device/1'}
   aspect_ratio: 150%
   title: null
 ```
@@ -468,12 +473,12 @@ type: horizontal-stack
 cards:
   - type: custom:config-template-card
     variables:
-      BASE: states['input_text.wled_ingress_base'].state
+      WLED_BASE_URL: states['input_text.wled_base_url'].state
     entities:
-      - input_text.wled_ingress_base
+      - input_text.wled_base_url
     card:
       type: iframe
-      url: ${BASE + '/preview?wled=4&rotate=270'}
+      url: ${WLED_BASE_URL + '/preview?wled=4&rotate=270'}
       title: null
       card_mod:
         style: |
@@ -511,12 +516,12 @@ cards:
     cards:
       - type: custom:config-template-card
         variables:
-          BASE: states['input_text.wled_ingress_base'].state
+          WLED_BASE_URL: states['input_text.wled_base_url'].state
         entities:
-          - input_text.wled_ingress_base
+          - input_text.wled_base_url
         card:
           type: iframe
-          url: ${BASE + '/preview?wled=4&rotate=270'}
+          url: ${WLED_BASE_URL + '/preview?wled=4&rotate=270'}
           title: null
           card_mod:
             style: |
@@ -538,12 +543,12 @@ cards:
     cards:
       - type: custom:config-template-card
         variables:
-          BASE: states['input_text.wled_ingress_base'].state
+          WLED_BASE_URL: states['input_text.wled_base_url'].state
         entities:
-          - input_text.wled_ingress_base
+          - input_text.wled_base_url
         card:
           type: iframe
-          url: ${BASE + '/preview2d?wled=3'}
+          url: ${WLED_BASE_URL + '/preview2d?wled=3'}
           aspect_ratio: 50%
           title: null
     grid_options:
@@ -553,12 +558,12 @@ cards:
     cards:
       - type: custom:config-template-card
         variables:
-          BASE: states['input_text.wled_ingress_base'].state
+          WLED_BASE_URL: states['input_text.wled_base_url'].state
         entities:
-          - input_text.wled_ingress_base
+          - input_text.wled_base_url
         card:
           type: iframe
-          url: ${BASE + '/preview?wled=5&rotate=270'}
+          url: ${WLED_BASE_URL + '/preview?wled=5&rotate=270'}
           title: null
           card_mod:
             style: |

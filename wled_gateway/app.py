@@ -347,7 +347,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
 async def handle_index(request):
     ingress_path = request.headers.get("X-Ingress-Path", "")
-    rows = "\\n".join(
+    rows = "".join(
         f"<tr><td>{dev_id}</td><td>{dev['name']}</td><td>{dev['ip']}</td>"
         f"<td><code>{ingress_path}/preview?wled={dev_id}</code></td></tr>"
         for dev_id, dev in DEVICES.items()

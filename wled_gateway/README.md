@@ -407,6 +407,168 @@ grid_options:
   rows: 1
 ```
 
+## Full-height vertical strip (advanced)
+
+The rotated preview above still sizes itself by `aspect_ratio` (a
+percentage of its own width), not by the actual height of its grid cell —
+fine for a short bar, but it won't stretch to fill a tall narrow column on
+its own. If you have [card-mod](https://github.com/thomasloven/lovelace-card-mod)
+installed, you can force it to fill the cell by height instead, using a
+fixed pixel value:
+
+```yaml
+type: horizontal-stack
+cards:
+  - type: custom:config-template-card
+    variables:
+      BASE: states['input_text.wled_ingress_base'].state
+    entities:
+      - input_text.wled_ingress_base
+    card:
+      type: iframe
+      url: ${BASE + '/preview?wled=4&rotate=270'}
+      title: null
+      card_mod:
+        style: |
+          ha-card > div {
+            padding-top: 0 !important;
+            height: 440px !important;
+            position: relative;
+          }
+          iframe {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+          }
+grid_options:
+  columns: 1
+  rows: 7
+```
+
+`ha-card > div` is the element the built-in iframe card uses for its
+aspect-ratio padding trick — zeroing its `padding-top` and giving it a
+concrete height is what breaks it out of ratio-based sizing. The trade-off:
+`440px` is a fixed value, not tied to the grid's actual row height, so it
+won't auto-resize if your layout or screen size changes — tune the number
+to taste. A full example combining two of these (flanking a media player
+card) with a 2D matrix preview and light-card/gear-button widgets for each
+device below:
+
+*(screenshot: three-panel DJ layout — vertical strip, matrix preview,
+vertical strip, with L/Matrix/R light controls beneath)*
+
+```yaml
+type: grid
+cards:
+  - type: horizontal-stack
+    cards:
+      - type: custom:config-template-card
+        variables:
+          BASE: states['input_text.wled_ingress_base'].state
+        entities:
+          - input_text.wled_ingress_base
+        card:
+          type: iframe
+          url: ${BASE + '/preview?wled=4&rotate=270'}
+          title: null
+          card_mod:
+            style: |
+              ha-card > div {
+                padding-top: 0 !important;
+                height: 440px !important;
+                position: relative;
+              }
+              iframe {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+              }
+    grid_options:
+      columns: 1
+      rows: 7
+  - type: horizontal-stack
+    cards:
+      - type: custom:config-template-card
+        variables:
+          BASE: states['input_text.wled_ingress_base'].state
+        entities:
+          - input_text.wled_ingress_base
+        card:
+          type: iframe
+          url: ${BASE + '/preview2d?wled=3'}
+          aspect_ratio: 50%
+          title: null
+    grid_options:
+      rows: 4
+      columns: 10
+  - type: horizontal-stack
+    cards:
+      - type: custom:config-template-card
+        variables:
+          BASE: states['input_text.wled_ingress_base'].state
+        entities:
+          - input_text.wled_ingress_base
+        card:
+          type: iframe
+          url: ${BASE + '/preview?wled=5&rotate=270'}
+          title: null
+          card_mod:
+            style: |
+              ha-card > div {
+                padding-top: 0 !important;
+                height: 440px !important;
+                position: relative;
+              }
+              iframe {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+              }
+    grid_options:
+      columns: 1
+      rows: 7
+  - type: custom:mushroom-light-card
+    entity: light.wled_strip_left
+    show_color_control: false
+    primary_info: none
+    icon: mdi:alpha-l
+    layout: horizontal
+    collapsible_controls: true
+    use_light_color: true
+    show_brightness_control: true
+    show_color_temp_control: false
+    secondary_info: none
+    hold_action:
+      action: more-info
+    tap_action:
+      action: toggle
+    grid_options:
+      columns: 8
+      rows: 1
+  - type: horizontal-stack
+    cards:
+      - type: custom:button-card
+        entity: light.wled_strip_left
+        icon: mdi:cog
+        show_name: false
+        tap_action:
+          action: more-info
+        layout: vertical
+        size: 50%
+        styles:
+          card:
+            - height: 55px
+    grid_options:
+      columns: 2
+      rows: 1
+```
+
+(repeat the light-card + gear-button pair for the matrix and the right
+strip, matching their own entities)
+
 ## Troubleshooting
 
 - **Iframe shows a blank card / "unable to load iframes... http:"** — this

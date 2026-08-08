@@ -10,9 +10,9 @@
 [![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64%20%7C%20armv7-blue)](#-published-images)
 [![Images on GHCR](https://img.shields.io/badge/images-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/shuricksumy?tab=packages&repo_name=wled-gateway-addon)
 
-<img src="wled_gateway/screenshots/strip-card.png" width="330" alt="Lovelace card for an LED strip: live gradient preview bar, power and preset buttons, effect and palette dropdowns, brightness, speed and intensity sliders">&nbsp;&nbsp;<img src="wled_gateway/screenshots/matrix-card.png" width="330" alt="Lovelace card for a 512-LED matrix: live dot-matrix preview, control buttons, effect and palette dropdowns and sliders">
+<img src="wled_gateway/screenshots/strip-card.png" width="260" alt="Lovelace card for an LED strip: live gradient preview bar, power and preset buttons, effect and palette dropdowns, brightness, speed and intensity sliders">&nbsp;&nbsp;<img src="wled_gateway/screenshots/matrix-card.png" width="260" alt="Lovelace card for a 512-LED matrix: live dot-matrix preview, control buttons, effect and palette dropdowns and sliders">&nbsp;&nbsp;<img src="wled_gateway/screenshots/device-ui.png" width="260" alt="WLED's own admin web UI embedded directly in a Home Assistant card via the device proxy">
 
-<sub>Live previews rendered straight into Lovelace — strip on the left, matrix on the right.</sub>
+<sub>Live previews and device controls rendered straight into Lovelace — strip, matrix, and the device's own admin UI, embedded.</sub>
 
 </div>
 

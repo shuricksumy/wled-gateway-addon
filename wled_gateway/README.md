@@ -167,11 +167,19 @@ leaving Home Assistant or hunting down its raw IP.
 
 It can also go straight into a Lovelace card:
 
+![WLED's own admin web UI running inside a Home Assistant card via the device proxy — power, timer, sync, color wheel, effects/segments/presets tabs](screenshots/device-ui.png)
+
 ```yaml
-type: iframe
-url: INGRESS/device/1/
-aspect_ratio: 150%
-title: null
+type: custom:config-template-card
+variables:
+  BASE: states['input_text.wled_ingress_base'].state
+entities:
+  - input_text.wled_ingress_base
+card:
+  type: iframe
+  url: ${BASE + '/device/1'}
+  aspect_ratio: 150%
+  title: null
 ```
 
 **Known limitation**: WLED's own web UI wasn't built to run under a URL

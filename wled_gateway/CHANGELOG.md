@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.2
+- Maintenance: upgrade the CI actions, which had drifted a full major behind
+  and were running on a deprecated Node runtime that GitHub was force-migrating
+  on every build. No functional change to the add-on itself; the image is
+  rebuilt, so it also picks up current base-image and dependency patches.
+
 ## 1.4.1
 - Add a proper `icon.png` and `logo.png`, so the add-on shows its own
   artwork in the Supervisor panel and add-on store instead of the generic

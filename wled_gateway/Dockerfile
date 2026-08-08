@@ -1,6 +1,8 @@
 FROM python:3.12-alpine
 WORKDIR /app
-RUN pip install --no-cache-dir aiohttp
+# Bounded below 4.0: that major release changes APIs this app uses, and an
+# unpinned install would pick it up silently on the next rebuild.
+RUN pip install --no-cache-dir "aiohttp>=3.9,<4"
 COPY app.py .
 EXPOSE 8099
 

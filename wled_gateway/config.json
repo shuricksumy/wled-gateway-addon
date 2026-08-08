@@ -1,6 +1,6 @@
 {
   "name": "WLED Gateway",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "slug": "wled_gateway",
   "description": "Single endpoint for WLED live-preview: holds the one live-view connection each WLED device allows and fans it out to multiple dashboard viewers at once.",
   "url": "https://github.com/shuricksumy/wled-gateway-addon",
@@ -13,6 +13,7 @@
   "panel_title": "WLED Gateway",
   "panel_admin": false,
   "homeassistant_api": true,
+  "watchdog": "http://[HOST]:[PORT:8099]/",
   "stage": "stable",
   "startup": "application",
   "boot": "auto",

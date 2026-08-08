@@ -17,6 +17,17 @@ jobs:
         run: python3 -m py_compile wled_gateway/app.py
       - name: Check config.json is valid JSON
         run: python3 -c "import json; json.load(open('wled_gateway/config.json'))"
+      - name: Check CHANGELOG documents the current version
+        # Images are tagged with the config.json version, so shipping a change
+        # without bumping it silently overwrites an already-published tag and
+        # Home Assistant never offers the update. Requiring a changelog entry
+        # makes forgetting the bump a build failure instead.
+        run: |
+          version=$(python3 -c "import json;print(json.load(open('wled_gateway/config.json'))['version'])")
+          if ! grep -q "^## ${version}$" wled_gateway/CHANGELOG.md; then
+            echo "::error::wled_gateway/CHANGELOG.md has no '## ${version}' entry — bump the version or document it"
+            exit 1
+          fi
 
   build:
     needs: validate

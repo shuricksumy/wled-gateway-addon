@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.0
+- Fix the live feed dropping for **everyone** whenever a viewer opened or
+  closed a preview. Connecting or disconnecting mutated the subscriber set
+  while a frame was mid-broadcast, which raised an error that looked like a
+  dead device and tore down the upstream connection — so the add-on
+  reconnected (and every other viewer froze for a second) on each tab open
+  or close. Frames are now broadcast over a snapshot of the subscriber list.
+- Add a Supervisor `watchdog` so the add-on is actually restarted when it
+  stops responding. The Docker `HEALTHCHECK` added in 1.3.0 only marks the
+  container unhealthy — Supervisor doesn't act on it, so it never delivered
+  the automatic restart that entry described. The healthcheck is kept for
+  running the image directly outside Home Assistant.
+- Escape device names, IPs and the Ingress path on the info page, so a name
+  containing `&` or `<` no longer breaks the page markup.
+- Drop WLED's reserved `RSVD` placeholder from synced effect lists entirely
+  instead of leaving one of them in the dropdown.
+- Pin `aiohttp` below 4.0 so a future major release can't silently change
+  behavior on the next image rebuild.
+
 ## 1.3.0
 - Add a reverse proxy for each device's own admin web UI at `/device/<id>/`,
   so it can be opened or embedded directly from Home Assistant for setup

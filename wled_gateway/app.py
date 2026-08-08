@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import logging
 import os
@@ -225,9 +226,10 @@ async def sync_effect_list(app, dev_id, ip, input_select_entity):
         return
 
     # WLED pads unused effect IDs with placeholder "RSVD" (reserved) entries —
-    # duplicates, which input_select.set_options rejects outright. Dedupe,
+    # duplicates, which input_select.set_options rejects outright. Drop them
+    # entirely (they aren't selectable effects) and dedupe whatever is left,
     # keeping first-occurrence order.
-    effects = list(dict.fromkeys(effects))
+    effects = [e for e in dict.fromkeys(effects) if e != "RSVD"]
 
     headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}", "Content-Type": "application/json"}
     payload = {"entity_id": input_select_entity, "options": effects}
@@ -257,14 +259,17 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                 backoff = 1
                 async for msg in ws:
                     if msg.type == WSMsgType.BINARY:
-                        dead = []
-                        for client in subscribers[dev_id]:
+                        # Iterate a snapshot: sending yields to the event loop, so a
+                        # viewer connecting or disconnecting mid-frame would otherwise
+                        # mutate this set while it's being iterated. That raises
+                        # RuntimeError, which the handler below would treat as a dead
+                        # upstream — dropping the feed for every viewer just because
+                        # one of them opened or closed a tab.
+                        for client in list(subscribers[dev_id]):
                             try:
                                 await client.send_bytes(msg.data)
                             except Exception:
-                                dead.append(client)
-                        for c in dead:
-                            subscribers[dev_id].discard(c)
+                                subscribers[dev_id].discard(client)
                     elif msg.type in (WSMsgType.CLOSED, WSMsgType.ERROR):
                         break
         except Exception as e:
@@ -437,17 +442,21 @@ INDEX_HTML = """<!DOCTYPE html>
 
 
 async def handle_index(request):
-    ingress_path = request.headers.get("X-Ingress-Path", "")
+    # Everything interpolated below is escaped: device names come from the
+    # add-on's own config, so an ampersand or angle bracket in one would
+    # otherwise render as broken markup (or worse) on this page.
+    ingress_path = html.escape(request.headers.get("X-Ingress-Path", ""))
 
     def row(dev_id, dev):
         connected = device_status[dev_id]["connected"]
         dot_class = "on" if connected else "off"
         dot_title = "connected" if connected else "not connected"
+        safe_id = html.escape(dev_id)
         return (
             f"<tr><td><span class='dot {dot_class}' title='{dot_title}'></span>{dot_title}</td>"
-            f"<td>{dev_id}</td><td>{dev['name']}</td><td>{dev['ip']}</td>"
-            f"<td><code>{ingress_path}/preview?wled={dev_id}</code></td>"
-            f"<td><a href='{ingress_path}/device/{dev_id}/' target='_blank'>Open</a></td></tr>"
+            f"<td>{safe_id}</td><td>{html.escape(dev['name'])}</td><td>{html.escape(dev['ip'])}</td>"
+            f"<td><code>{ingress_path}/preview?wled={safe_id}</code></td>"
+            f"<td><a href='{ingress_path}/device/{safe_id}/' target='_blank'>Open</a></td></tr>"
         )
 
     rows = "".join(row(dev_id, dev) for dev_id, dev in DEVICES.items())

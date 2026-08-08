@@ -222,6 +222,11 @@ async def sync_effect_list(app, dev_id, ip, input_select_entity):
         log.warning("could not fetch effect list from %s (%s): %s", dev_id, ip, e)
         return
 
+    # WLED pads unused effect IDs with placeholder "RSVD" (reserved) entries —
+    # duplicates, which input_select.set_options rejects outright. Dedupe,
+    # keeping first-occurrence order.
+    effects = list(dict.fromkeys(effects))
+
     headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}", "Content-Type": "application/json"}
     payload = {"entity_id": input_select_entity, "options": effects}
     try:

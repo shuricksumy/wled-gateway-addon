@@ -6,5 +6,7 @@ Settings → Add-ons → Add-on Store → ⋮ → Repositories →
 
 ## Add-ons
 
-- **wled_gateway** — single Ingress endpoint for WLED live-preview, fans one
-  device connection out to multiple simultaneous dashboard viewers.
+- **[wled_gateway](wled_gateway/README.md)** — single Ingress endpoint for
+  WLED live-preview, fans one device connection out to multiple simultaneous
+  dashboard viewers. See its README for configuration and Lovelace card
+  examples.

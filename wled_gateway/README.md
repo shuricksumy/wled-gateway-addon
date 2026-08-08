@@ -32,15 +32,14 @@ yourself and want a faster test loop than a full Supervisor install cycle.
 Go to the add-on's **Configuration** tab and list your devices:
 
 ```yaml
+auto_create_helpers: true
 devices:
   - id: "1"
     name: Living Room
     ip: 192.0.2.11
-    input_select: input_select.wled_effect_1
   - id: "2"
     name: Matrix
     ip: 192.0.2.13
-    input_select: input_select.wled_effect_matrix
 ```
 
 - `id` — whatever short string you want; it's what you'll reference from
@@ -48,11 +47,27 @@ devices:
   Assistant.
 - `name` — for your own reference, not used anywhere functionally yet.
 - `ip` — the WLED device's LAN IP.
-- `input_select` — optional. The entity ID of an `input_select` helper in
-  Home Assistant whose `options` you want kept in sync with this device's
-  real effect list. Omit it if you don't have one for this device.
+- `input_select` — optional, and usually unnecessary. Each device defaults to
+  `input_select.wled_effect_<id>` (device `6` → `input_select.wled_effect_6`),
+  created for you on first connect. Set this only to point a device at a
+  helper you already have under a different name.
+- `auto_create_helpers` — optional, defaults to `true`. Set it to `false` to
+  stop the add-on creating helpers, in which case only devices with an
+  explicit `input_select` are synced.
 
 Restart the add-on after changing the list.
+
+### Effect helpers are created for you
+
+Add a device, restart, and the matching `input_select` appears in Home
+Assistant already populated with that device's real effect list — no helper
+to create by hand, no entity id to type in. The id follows straight from the
+device id, so device `6` gets `input_select.wled_effect_6`.
+
+Existing helpers are never touched: if the entity is already there, the
+add-on just keeps its options in sync as before. Creating helpers needs an
+admin token, which add-ons normally have — if yours doesn't, the log says so
+and names the helper to create by hand, and everything else keeps working.
 
 ## Effect list sync
 
@@ -83,6 +98,10 @@ reconnecting) to each device, it fetches the device's actual effect list
 directly (`GET /json/effects`) and pushes it into the configured
 `input_select` via Home Assistant's own API
 (`input_select.set_options`) — no automation required for this part.
+
+The helper itself is created the same way if it doesn't exist yet (see
+[above](#effect-helpers-are-created-for-you)), so adding a device to the
+config is all that's needed to get a working, populated effect dropdown.
 
 This needs the add-on's `homeassistant_api: true` permission (already set
 in `config.json`), which gives it a `SUPERVISOR_TOKEN` to call

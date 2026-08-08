@@ -3,6 +3,7 @@ import html
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
@@ -13,6 +14,7 @@ log = logging.getLogger("wled-gateway")
 
 OPTIONS_PATH = Path("/data/options.json")
 HA_API = "http://supervisor/core/api"
+HA_WS = "ws://supervisor/core/websocket"
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
 
 # One place for everything WLED-preview related, run as a Home Assistant
@@ -28,15 +30,37 @@ SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
 # pick up changes, no rebuild needed.
 
 
+def slugify(text):
+    """Match how Home Assistant turns a helper's name into its entity_id, so the
+    id we predict up front is the id HA actually ends up creating."""
+    return re.sub(r"[^a-z0-9]+", "_", str(text).strip().lower()).strip("_") or "device"
+
+
+def helper_name(dev_id):
+    """Name the helper such that HA slugifies it into default_input_select()."""
+    return f"WLED Effect {dev_id}"
+
+
+def default_input_select(dev_id):
+    return f"input_select.wled_effect_{slugify(dev_id)}"
+
+
+OPTIONS = json.loads(OPTIONS_PATH.read_text())
+# Adding a device shouldn't mean hand-creating a matching helper and typing its
+# entity id into the config. When left unset, each device gets a predictable
+# input_select.wled_effect_<id>, created on first connect if it's missing.
+AUTO_CREATE_HELPERS = OPTIONS.get("auto_create_helpers", True)
+
+
 def load_devices():
-    options = json.loads(OPTIONS_PATH.read_text())
     devices = {}
-    for dev in options.get("devices", []):
+    for dev in OPTIONS.get("devices", []):
         dev_id = str(dev["id"])
+        configured = dev.get("input_select")
         devices[dev_id] = {
             "name": dev.get("name", dev_id),
             "ip": dev["ip"],
-            "input_select": dev.get("input_select"),
+            "input_select": configured or (default_input_select(dev_id) if AUTO_CREATE_HELPERS else None),
         }
     return devices
 
@@ -209,6 +233,59 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
 """
 
 
+async def ha_entity_exists(app, entity_id):
+    """None means 'couldn't tell' — distinct from a definite 'not there', so a
+    transient API failure never triggers a duplicate helper being created."""
+    headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}"}
+    try:
+        async with app["session"].get(f"{HA_API}/states/{entity_id}", headers=headers, timeout=5) as resp:
+            if resp.status == 200:
+                return True
+            if resp.status == 404:
+                return False
+            log.warning("unexpected %s from HA checking %s", resp.status, entity_id)
+            return None
+    except Exception as e:
+        log.warning("could not ask HA about %s: %s", entity_id, e)
+        return None
+
+
+async def ha_create_input_select(app, name, options):
+    """Create an input_select helper. There's no REST endpoint for this — helper
+    creation only exists on the WebSocket API, and it requires an admin token."""
+    try:
+        async with app["session"].ws_connect(HA_WS, timeout=10) as ws:
+            hello = await ws.receive_json(timeout=10)
+            if hello.get("type") != "auth_required":
+                log.warning("unexpected HA websocket greeting: %s", hello.get("type"))
+                return False
+            await ws.send_json({"type": "auth", "access_token": SUPERVISOR_TOKEN})
+            auth = await ws.receive_json(timeout=10)
+            if auth.get("type") != "auth_ok":
+                log.warning("HA websocket auth failed: %s", auth)
+                return False
+
+            await ws.send_json({"id": 1, "type": "input_select/create", "name": name, "options": options})
+            while True:
+                msg = await ws.receive_json(timeout=10)
+                if msg.get("type") == "result" and msg.get("id") == 1:
+                    if msg.get("success"):
+                        return True
+                    error = msg.get("error", {})
+                    if error.get("code") == "unauthorized":
+                        log.warning(
+                            "not allowed to create helpers — create %r by hand, or set it "
+                            "explicitly per device with input_select:",
+                            name,
+                        )
+                    else:
+                        log.warning("HA refused to create helper %r: %s", name, error)
+                    return False
+    except Exception as e:
+        log.warning("could not create helper %r over the HA websocket: %s", name, e)
+        return False
+
+
 async def sync_effect_list(app, dev_id, ip, input_select_entity):
     """Push the device's real, current effect list into an HA input_select's
     options, so dashboard dropdowns never go stale. Skipped if no
@@ -230,6 +307,19 @@ async def sync_effect_list(app, dev_id, ip, input_select_entity):
     # entirely (they aren't selectable effects) and dedupe whatever is left,
     # keeping first-occurrence order.
     effects = [e for e in dict.fromkeys(effects) if e != "RSVD"]
+    if not effects:
+        log.warning("device %s returned no usable effects; nothing to sync", dev_id)
+        return
+
+    # Create the helper on first sight rather than making the user pre-create one
+    # per device. Only when it's definitely absent — "couldn't tell" is left alone.
+    if AUTO_CREATE_HELPERS and await ha_entity_exists(app, input_select_entity) is False:
+        name = helper_name(dev_id)
+        if await ha_create_input_select(app, name, effects):
+            log.info("created %s (%r) with %d effects", input_select_entity, name, len(effects))
+            # Created with the right options already; nothing left to push.
+            return
+        return
 
     headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}", "Content-Type": "application/json"}
     payload = {"entity_id": input_select_entity, "options": effects}

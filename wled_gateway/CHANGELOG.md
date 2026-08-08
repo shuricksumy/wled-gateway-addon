@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0
+- Effect helpers are now created for you. Adding a device no longer means
+  hand-creating a matching `input_select` and typing its entity id into the
+  config: each device defaults to `input_select.wled_effect_<id>` (device `6`
+  → `input_select.wled_effect_6`) and the helper is created, already populated
+  with that device's real effect list, on first connect.
+- `input_select` per device is now optional — set it only to point at a helper
+  you already have under a different name. Existing helpers are never
+  recreated or overwritten, just kept in sync as before.
+- New `auto_create_helpers` option (default `true`) to turn helper creation
+  off; with it off, only devices with an explicit `input_select` are synced.
+- Skip syncing when a device reports no usable effects, instead of pushing an
+  empty list that Home Assistant rejects.
+
 ## 1.4.2
 - Maintenance: upgrade the CI actions, which had drifted a full major behind
   and were running on a deprecated Node runtime that GitHub was force-migrating

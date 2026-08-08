@@ -1,6 +1,6 @@
 {
   "name": "WLED Gateway",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "slug": "wled_gateway",
   "description": "Single endpoint for WLED live-preview: holds the one live-view connection each WLED device allows and fans it out to multiple dashboard viewers at once.",
   "url": "https://github.com/shuricksumy/wled-gateway-addon",
@@ -18,6 +18,7 @@
   "startup": "application",
   "boot": "auto",
   "options": {
+    "auto_create_helpers": true,
     "devices": [
       {"id": "1", "name": "Living Room", "ip": "192.0.2.11", "input_select": "input_select.wled_effect_1"},
       {"id": "2", "name": "Bedroom", "ip": "192.0.2.12", "input_select": "input_select.wled_effect_2"},
@@ -27,6 +28,7 @@
     ]
   },
   "schema": {
+    "auto_create_helpers": "bool?",
     "devices": [
       {"id": "str", "name": "str", "ip": "str", "input_select": "str?"}
     ]

@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - "wled_gateway/**"
+      # Docs, screenshots and branding never enter the image, so editing them
+      # shouldn't rebuild all three architectures and re-push a released tag.
+      - "!wled_gateway/**.md"
+      - "!wled_gateway/screenshots/**"
+      - "!wled_gateway/icon.png"
+      - "!wled_gateway/logo.png"
       - ".github/workflows/build.yml"
   workflow_dispatch:
 

@@ -1,4 +1,6 @@
-# 🌈 WLED Gateway
+<img src="icon.png" width="104" align="right" alt="WLED Gateway add-on icon">
+
+# WLED Gateway
 
 [![Build](https://github.com/shuricksumy/wled-gateway-addon/actions/workflows/build.yml/badge.svg)](https://github.com/shuricksumy/wled-gateway-addon/actions/workflows/build.yml)
 [![Ingress](https://img.shields.io/badge/Ingress-enabled-success)](https://developers.home-assistant.io/docs/add-ons/presentation#ingress)

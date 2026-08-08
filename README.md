@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🌈 WLED Gateway
+<h1>
+  <img src="wled_gateway/logo.png" width="420" alt="WLED Gateway">
+</h1>
 
 **A Home Assistant add-on that lets *every* dashboard show a WLED live preview at once.**
 

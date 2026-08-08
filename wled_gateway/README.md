@@ -172,6 +172,8 @@ integration entities (current draw / LED count / IP chips, power / sync /
 restart controls, effect + palette selects, brightness/color, intensity and
 speed sliders):
 
+![Full strip device card: chips, live preview, power/sync/restart row, effect and palette selects, light card, intensity/speed sliders](screenshots/strip-card.png)
+
 ```yaml
 type: vertical-stack
 cards:

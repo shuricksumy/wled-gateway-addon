@@ -14,6 +14,12 @@
 
 [![Open your Home Assistant instance and show the add add-on repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fshuricksumy%2Fwled-gateway-addon)
 
+<img src="wled_gateway/screenshots/demo.gif" width="720" alt="A Home Assistant dashboard with live WLED previews: strips running down either side of a matrix panel, and a ring, all animating together in real time">
+
+<sub>Strips, a matrix and a ring — every one of them live, on one dashboard, at the same time.</sub>
+
+<br><br>
+
 <img src="wled_gateway/screenshots/strip-card.png" width="260" alt="Lovelace card for an LED strip: live gradient preview bar, power and preset buttons, effect and palette dropdowns, brightness, speed and intensity sliders">&nbsp;&nbsp;<img src="wled_gateway/screenshots/matrix-card.png" width="260" alt="Lovelace card for a 512-LED matrix: live dot-matrix preview, control buttons, effect and palette dropdowns and sliders">&nbsp;&nbsp;<img src="wled_gateway/screenshots/device-ui.png" width="260" alt="WLED's own admin web UI embedded directly in a Home Assistant card via the device proxy">
 
 <sub>Live previews and device controls rendered straight into Lovelace — strip, matrix, and the device's own admin UI, embedded.</sub>

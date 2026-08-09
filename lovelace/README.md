@@ -68,8 +68,10 @@ check which copy you actually got.
 | `addon` | — | Add-on slug. Required, unless you set `ingress_path`. |
 | `ingress_path` | — | Use a fixed `/api/hassio_ingress/<token>` instead of looking it up. Only for testing — it breaks when the add-on is reinstalled. |
 | `device` | `"1"` | Which device, matching the `id` in the add-on's configuration. |
-| `view` | `auto` | `auto` picks per frame, `strip` forces the bar, `matrix` forces the dot grid. |
-| `rotate` | `0` | `0`, `90`, `180`, `270`. See [Rotation](#rotation). |
+| `view` | `auto` | `auto` picks per frame, `strip` forces the bar, `matrix` forces the dot grid, `ring` bends the strip into a circle. |
+| `rotate` | `0` | `0`, `90`, `180`, `270` — or any angle for a ring. See [Rotation](#rotation). |
+| `ring_thickness` | `0.35` | Ring only. Band thickness as a fraction of the radius: `0.1` a fine hoop, `1` a full disc. |
+| `reverse` | `false` | Ring only. Run the LEDs anticlockwise. |
 | `fill` | `true` | Fill the card. Combine with `height`/`aspect_ratio` to use those as a *preferred* size that still can't overflow the card. Set `false` for a plain fixed height. |
 | `height` | — | Explicit CSS height, e.g. `40px`. Wins over `aspect_ratio` and `fill`. |
 | `width` | — | Narrows the preview inside the card, e.g. `10px` for a thin vertical strip. The card keeps its grid size; only the drawing is constrained. |
@@ -97,6 +99,11 @@ its neighbours.
 
 At `90`/`270` a matrix swaps its width and height, so a 32×16 panel becomes
 16×32 and still fits the card.
+
+For a **ring**, `rotate` isn't limited to those four: any angle works, and it
+moves where LED 0 sits around the circle. `0` puts it at the top, `90` at 3
+o'clock, and something like `18` lines a 20-LED ring up with wherever its first
+LED physically sits.
 
 ---
 
@@ -184,6 +191,23 @@ addon: 71966d0e_wled_gateway
 device: "3"
 view: matrix
 ```
+
+### Ring
+
+For a circular device — the strip is bent round into a circle, in order.
+
+```yaml
+type: custom:wled-gateway-card
+addon: 71966d0e_wled_gateway
+device: "6"
+view: ring
+rotate: 0            # any angle: where LED 0 sits, 0 = top
+ring_thickness: 0.35 # 0.1 a fine hoop, 1 a full disc
+# reverse: true      # if the ring runs the other way round
+```
+
+`view: ring` has to be asked for — nothing in the data says a strip is bent
+into a circle.
 
 ### Two strips around a matrix
 

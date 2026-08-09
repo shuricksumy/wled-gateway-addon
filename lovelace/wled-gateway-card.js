@@ -30,7 +30,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.6.0";
+const CARD_VERSION = "1.7.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -168,11 +168,17 @@ class WledGatewayCard extends HTMLElement {
     }
     this._config = {
       device: "1",
-      view: "auto", // auto | strip | matrix
+      view: "auto", // auto | strip | matrix | ring
+      // Ring only: how thick the band is, as a fraction of its radius.
+      ring_thickness: 0.35,
+      // Ring only: run the LEDs anticlockwise instead.
+      reverse: false,
       // 0 / 90 / 180 / 270, turning the preview clockwise:
       //   strip    0 runs left to right, 90 top to bottom, 180 right to left,
       //            270 bottom to top
       //   matrix   turns the panel, swapping its width and height at 90/270
+      //   ring     any angle, not just the four: it moves where LED 0 sits
+      //            around the circle, 0 being the top
       // Applied while drawing rather than as a CSS transform, so a vertical
       // strip lays out as a genuinely tall card instead of a wide one tipped
       // on its side and overflowing.
@@ -223,15 +229,15 @@ class WledGatewayCard extends HTMLElement {
 
   getGridOptions() {
     const cfg = this._config || {};
-    const matrix = cfg.view === "matrix";
+    const square = cfg.view === "matrix" || cfg.view === "ring";
     const rot = this._rotation();
-    const vertical = matrix ? false : rot === 90 || rot === 270;
+    const vertical = square ? false : rot === 90 || rot === 270;
     return {
       // A vertical strip is useless one row tall, so it asks for height and a
-      // narrow default width instead.
-      rows: matrix ? 4 : vertical ? 6 : 1,
+      // narrow default width instead. A ring wants room in both directions.
+      rows: square ? 4 : vertical ? 6 : 1,
       min_rows: 1,
-      columns: vertical ? 3 : 12,
+      columns: cfg.view === "ring" ? 6 : vertical ? 3 : 12,
       min_columns: vertical ? 1 : 3,
     };
   }
@@ -496,10 +502,52 @@ class WledGatewayCard extends HTMLElement {
   _paint(bytes) {
     const is2d = bytes[1] === 2;
     const offset = is2d ? 4 : 2;
-    const wantMatrix =
-      this._config.view === "matrix" || (this._config.view === "auto" && is2d);
+    const view = this._config.view;
+    // Ring is never auto-detected — nothing in the frame says the strip is bent
+    // into a circle, so it has to be asked for.
+    if (view === "ring") return this._drawRing(bytes, offset);
+    const wantMatrix = view === "matrix" || (view === "auto" && is2d);
     if (wantMatrix && is2d) this._drawMatrix(bytes);
     else this._drawStrip(bytes, offset);
+  }
+
+  _drawRing(bytes, offset) {
+    const ctx = this._sizeCanvas();
+    if (!ctx) return;
+    const count = Math.floor((bytes.length - offset) / 3);
+    if (count <= 0) return;
+
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, this._cssW, this._cssH);
+
+    const cx = this._cssW / 2;
+    const cy = this._cssH / 2;
+    const outer = Math.max(1, Math.min(this._cssW, this._cssH) / 2 - 1);
+    const thickness = Math.min(0.95, Math.max(0.05, Number(this._config.ring_thickness) || 0.35));
+    const inner = outer * (1 - thickness);
+
+    // rotate is a free angle here, and 0 puts LED 0 at the top rather than at
+    // the 3 o'clock position canvas angles start from.
+    const startAngle = ((Number(this._config.rotate) || 0) - 90) * (Math.PI / 180);
+    const direction = this._config.reverse ? -1 : 1;
+    const step = (2 * Math.PI) / count;
+    // Hairline gap between segments so a dense ring still reads as separate
+    // LEDs, but never so wide that a sparse ring turns into loose specks.
+    const gap = Math.min(step * 0.12, 0.03);
+
+    for (let i = 0; i < count; i++) {
+      const p = offset + i * 3;
+      const [r, g, b] = this._scale(bytes[p], bytes[p + 1], bytes[p + 2]);
+      const centre = startAngle + direction * i * step;
+      const half = (step - gap) / 2;
+
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, outer, centre - half, centre + half);
+      ctx.arc(cx, cy, inner, centre + half, centre - half, true);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 
   // Backing store follows the device pixel ratio, otherwise the matrix dots

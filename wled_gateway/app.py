@@ -70,7 +70,10 @@ def load_devices():
 
 DEVICES = load_devices()
 subscribers = {dev_id: set() for dev_id in DEVICES}
-device_status = {dev_id: {"connected": False, "last_connected_at": None, "bri": None} for dev_id in DEVICES}
+device_status = {
+    dev_id: {"connected": False, "last_connected_at": None, "bri": None, "frame_peak": None}
+    for dev_id in DEVICES
+}
 
 PREVIEW_HTML = """<!DOCTYPE html>
 <html>
@@ -118,13 +121,32 @@ PREVIEW_HTML = """<!DOCTYPE html>
     var deviceBri = 255;
     var factor = BASE_GAIN * gain;
 
+    // Rolling peak of what's actually arriving. WLED restores pixel colour when
+    // it reads the strip back, so on some setups the live view is already at
+    // full scale even when the device is dimmed. Dividing by brightness there
+    // would double-correct and blow the picture out to white, so the boost is
+    // also limited by what the data itself justifies: if frames already reach
+    // 255, nothing is scaled up regardless of the brightness reported.
+    var peak = 255, peakSetAt = 0;
+    var PEAK_HOLD_MS = 2000;
+
+    function notePeak(frameMax) {
+      const now = Date.now();
+      if (frameMax >= peak || now - peakSetAt > PEAK_HOLD_MS) {
+        peak = frameMax;
+        peakSetAt = now;
+      }
+    }
+
     function recomputeFactor() {
       if (fixedPercent > 0) {
         factor = Math.min(MAX_FACTOR, (fixedPercent / 100) * gain);
         return;
       }
-      const norm = normalize ? 255 / Math.max(deviceBri, 1) : 1;
-      factor = Math.min(MAX_FACTOR, BASE_GAIN * gain * norm);
+      if (!normalize) { factor = BASE_GAIN * gain; return; }
+      const byBrightness = 255 / Math.max(deviceBri, 1);
+      const byData = 255 / Math.max(peak, 1);
+      factor = Math.min(MAX_FACTOR, BASE_GAIN * gain * Math.min(byBrightness, byData));
     }
     recomputeFactor();
 
@@ -195,8 +217,15 @@ PREVIEW_HTML = """<!DOCTYPE html>
           if (Object.prototype.toString.call(event.data) !== "[object ArrayBuffer]") return;
           const bytes = new Uint8Array(event.data);
           if (bytes[0] !== 76) return;
-          let grad = "linear-gradient(90deg,";
           const offset = (bytes[1] === 2) ? 4 : 2;
+          let frameMax = 0;
+          for (let i = offset; i < bytes.length; i++) {
+            if (bytes[i] > frameMax) frameMax = bytes[i];
+          }
+          notePeak(frameMax);
+          recomputeFactor();
+
+          let grad = "linear-gradient(90deg,";
           for (let i = offset; i < bytes.length; i += 3) {
             const [r, g, b] = scalePixel(bytes[i], bytes[i + 1], bytes[i + 2]);
             grad += `rgb(${r},${g},${b})`;
@@ -257,13 +286,32 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
     var deviceBri = 255;
     var factor = BASE_GAIN * gain;
 
+    // Rolling peak of what's actually arriving. WLED restores pixel colour when
+    // it reads the strip back, so on some setups the live view is already at
+    // full scale even when the device is dimmed. Dividing by brightness there
+    // would double-correct and blow the picture out to white, so the boost is
+    // also limited by what the data itself justifies: if frames already reach
+    // 255, nothing is scaled up regardless of the brightness reported.
+    var peak = 255, peakSetAt = 0;
+    var PEAK_HOLD_MS = 2000;
+
+    function notePeak(frameMax) {
+      const now = Date.now();
+      if (frameMax >= peak || now - peakSetAt > PEAK_HOLD_MS) {
+        peak = frameMax;
+        peakSetAt = now;
+      }
+    }
+
     function recomputeFactor() {
       if (fixedPercent > 0) {
         factor = Math.min(MAX_FACTOR, (fixedPercent / 100) * gain);
         return;
       }
-      const norm = normalize ? 255 / Math.max(deviceBri, 1) : 1;
-      factor = Math.min(MAX_FACTOR, BASE_GAIN * gain * norm);
+      if (!normalize) { factor = BASE_GAIN * gain; return; }
+      const byBrightness = 255 / Math.max(deviceBri, 1);
+      const byData = 255 / Math.max(peak, 1);
+      factor = Math.min(MAX_FACTOR, BASE_GAIN * gain * Math.min(byBrightness, byData));
     }
     recomputeFactor();
 
@@ -316,6 +364,13 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
           const bytes = new Uint8Array(event.data);
           if (bytes[0] !== 76 || bytes[1] !== 2) return;
           const cols = bytes[2], rows = bytes[3];
+          let frameMax = 0;
+          for (let k = 4; k < bytes.length; k++) {
+            if (bytes[k] > frameMax) frameMax = bytes[k];
+          }
+          notePeak(frameMax);
+          recomputeFactor();
+
           const scale = Math.min(c.width / cols, c.height / rows);
           const xOffset = Math.floor((c.width - scale * cols) / 2);
           let i = 4;
@@ -483,6 +538,12 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                 backoff = 1
                 async for msg in ws:
                     if msg.type == WSMsgType.BINARY:
+                        # Diagnostic: the brightest channel in this frame. Read
+                        # alongside "bri" it says whether the device scales the
+                        # live view by brightness or sends it already restored.
+                        payload = msg.data[4:] if len(msg.data) > 1 and msg.data[1] == 2 else msg.data[2:]
+                        if payload:
+                            device_status[dev_id]["frame_peak"] = max(payload)
                         # Iterate a snapshot: sending yields to the event loop, so a
                         # viewer connecting or disconnecting mid-frame would otherwise
                         # mutate this set while it's being iterated. That raises
@@ -573,6 +634,7 @@ async def handle_devices(request):
             **dev,
             "connected": device_status[dev_id]["connected"],
             "bri": device_status[dev_id]["bri"],
+            "frame_peak": device_status[dev_id]["frame_peak"],
         }
         for dev_id, dev in DEVICES.items()
     })

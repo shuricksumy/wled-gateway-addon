@@ -119,7 +119,10 @@ brightness**, so a strip dimmed to 20% previews at 20% — nearly black on a
 dashboard, even though the card is only meant to show what's playing.
 
 By default the add-on scales that back up, so the preview reads at full
-strength whatever the device is set to. Colours are preserved: it divides out
+strength whatever the device is set to. The boost is limited by what the
+frames themselves contain: some setups already send the live view at full
+scale even when dimmed, and scaling those up again would wash the picture out,
+so nothing is boosted beyond what the data justifies. Colours are preserved: it divides out
 the reported brightness rather than just brightening everything. Untick
 **Preview at full brightness** on a device to see the strip exactly as it
 really looks.

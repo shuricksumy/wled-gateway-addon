@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.3
+- Fix dimmed previews washing out to pale, desaturated colour. The boost
+  assumed the live view is always scaled by the device's brightness, but WLED
+  restores pixel colour when it reads the strip back, so on some setups frames
+  already arrive at full scale — dividing by brightness on top of that drove
+  even the background to maximum. The boost is now limited by the peak
+  actually present in recent frames, so a feed that already reaches 255 is left
+  alone no matter what brightness is reported, while a feed that really is
+  dimmed is still scaled back up. A genuinely dark scene at full brightness is
+  left dark too.
+- `/devices` reports `frame_peak` alongside `bri`, which is what makes the two
+  cases distinguishable.
+
 ## 1.6.2
 - Fix dimmed previews looking washed out, with the dark areas lifted and the
   whole image low-contrast. The boost was capped at 8x, but a strip at 10%

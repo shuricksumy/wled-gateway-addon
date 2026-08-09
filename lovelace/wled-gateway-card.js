@@ -30,7 +30,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.2.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -170,7 +170,15 @@ class WledGatewayCard extends HTMLElement {
       device: "1",
       view: "auto", // auto | strip | matrix
       rotate: 0,
-      height: null, // css length; defaults per view
+      // Sizing, in order of precedence:
+      //   height       explicit css length, e.g. "60px"
+      //   aspect_ratio "16:9", or a percentage like "5%" (height/width, as the
+      //                built-in iframe card uses)
+      //   fill         otherwise stretch to whatever height the card is given,
+      //                which is what you want in a sections dashboard
+      height: null,
+      aspect_ratio: null,
+      fill: true,
       normalize: true,
       bright: 0, // fixed percentage; 0 = follow the device
       gain: 1,
@@ -192,6 +200,19 @@ class WledGatewayCard extends HTMLElement {
     return this._config && this._config.view === "matrix" ? 4 : 1;
   }
 
+  // Sections dashboards size by grid rows rather than content. Without this a
+  // strip gets a default-height cell and the preview floats in empty space.
+  // Anything set under grid_options in the card config still wins.
+  getGridOptions() {
+    const matrix = this._config && this._config.view === "matrix";
+    return {
+      rows: matrix ? 4 : 1,
+      min_rows: 1,
+      columns: 12,
+      min_columns: 3,
+    };
+  }
+
   connectedCallback() {
     if (this._config && this._hass) this._start();
   }
@@ -202,16 +223,45 @@ class WledGatewayCard extends HTMLElement {
 
   /* ---------------- rendering ---------------- */
 
+  // "5%" means height = 5% of width, matching the built-in iframe card, which
+  // is what people will have used before switching to this one.
+  _aspectRatioCss(value) {
+    const raw = String(value).trim();
+    if (raw.endsWith("%")) {
+      const pct = parseFloat(raw);
+      return pct > 0 ? `${100 / pct} / 1` : null;
+    }
+    const parts = raw.split(/[:/]/).map((n) => parseFloat(n));
+    if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) return `${parts[0]} / ${parts[1]}`;
+    return null;
+  }
+
   _render() {
     const cfg = this._config;
-    const isMatrix = cfg.view === "matrix";
-    const height = cfg.height || (isMatrix ? "180px" : "40px");
+    const ratio = cfg.aspect_ratio ? this._aspectRatioCss(cfg.aspect_ratio) : null;
+
+    // Fill mode has to be carried all the way down from the host, or the card
+    // keeps its content height and leaves the rest of the grid cell empty.
+    let sizing;
+    if (cfg.height) {
+      sizing = `.wrap { height: ${cfg.height}; }`;
+    } else if (ratio) {
+      sizing = `.wrap { aspect-ratio: ${ratio}; width: 100%; }`;
+    } else if (cfg.fill) {
+      sizing = `
+        :host { display: block; height: 100%; }
+        ha-card { height: 100%; display: flex; flex-direction: column; }
+        .wrap { flex: 1 1 auto; min-height: 24px; }`;
+    } else {
+      sizing = `.wrap { height: ${cfg.view === "matrix" ? "180px" : "40px"}; }`;
+    }
 
     this.shadowRoot.innerHTML = `
       <style>
         ha-card { overflow: hidden; }
-        .wrap { position: relative; background: #000; height: ${height}; }
+        .wrap { position: relative; background: #000; }
         canvas { display: block; width: 100%; height: 100%; }
+        ${sizing}
         .msg {
           position: absolute; inset: 0; display: flex;
           align-items: center; justify-content: center;
@@ -388,49 +438,58 @@ class WledGatewayCard extends HTMLElement {
     else this._drawStrip(bytes, offset);
   }
 
+  // Backing store follows the device pixel ratio, otherwise the matrix dots
+  // look soft on phones and hi-dpi screens. Drawing stays in CSS pixels.
   _sizeCanvas() {
     const c = this._canvas;
     const rect = c.getBoundingClientRect();
-    const w = Math.max(1, Math.round(rect.width));
-    const h = Math.max(1, Math.round(rect.height));
+    const cssW = Math.max(1, Math.round(rect.width));
+    const cssH = Math.max(1, Math.round(rect.height));
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const w = Math.round(cssW * dpr);
+    const h = Math.round(cssH * dpr);
     if (c.width !== w || c.height !== h) {
       c.width = w;
       c.height = h;
     }
-    return c.getContext("2d");
+    const ctx = c.getContext("2d");
+    if (ctx) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this._cssW = cssW;
+      this._cssH = cssH;
+    }
+    return ctx;
   }
 
   _drawStrip(bytes, offset) {
     const ctx = this._sizeCanvas();
     if (!ctx) return;
-    const c = this._canvas;
     const count = Math.floor((bytes.length - offset) / 3);
     if (count <= 0) return;
 
-    const width = c.width / count;
+    const width = this._cssW / count;
     for (let i = 0; i < count; i++) {
       const p = offset + i * 3;
       const [r, g, b] = this._scale(bytes[p], bytes[p + 1], bytes[p + 2]);
       ctx.fillStyle = `rgb(${r},${g},${b})`;
-      // +1 avoids hairline gaps between cells on fractional widths
-      ctx.fillRect(Math.floor(i * width), 0, Math.ceil(width) + 1, c.height);
+      // Overlap by a pixel: fractional widths otherwise leave hairline gaps.
+      ctx.fillRect(i * width, 0, width + 1, this._cssH);
     }
   }
 
   _drawMatrix(bytes) {
     const ctx = this._sizeCanvas();
     if (!ctx) return;
-    const c = this._canvas;
     const cols = bytes[2];
     const rows = bytes[3];
     if (!cols || !rows) return;
 
     ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillRect(0, 0, this._cssW, this._cssH);
 
-    const scale = Math.min(c.width / cols, c.height / rows);
-    const xOffset = Math.floor((c.width - scale * cols) / 2);
-    const yOffset = Math.floor((c.height - scale * rows) / 2);
+    const scale = Math.min(this._cssW / cols, this._cssH / rows);
+    const xOffset = Math.floor((this._cssW - scale * cols) / 2);
+    const yOffset = Math.floor((this._cssH - scale * rows) / 2);
 
     let i = 4;
     for (let y = 0.5; y < rows; y++) {

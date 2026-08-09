@@ -105,6 +105,23 @@ At `90`/`270` a matrix swaps its width and height, so a 32×16 panel becomes
 By default the card fills whatever space it's given, so in a sections dashboard
 you can just drag its resize handle.
 
+**Put the card straight into the section**, not inside a `grid` card. A card can
+only fill a height something above it actually defines: a section's grid cell
+does, but a nested `grid` card sizes itself from its contents, so there's no
+height to fill and the preview falls back to a minimum. Use `grid_options` on
+the card itself to place it:
+
+```yaml
+type: custom:wled-gateway-card
+addon: 71966d0e_wled_gateway
+device: "4"
+rotate: 270
+width: 15px
+grid_options:
+  columns: 1
+  rows: 6
+```
+
 It also suggests a starting size: 1 row for a horizontal strip, 6 rows and 3
 columns for a vertical one, 4 rows for a matrix. Anything you set under
 `grid_options` in the card config overrides that.
@@ -219,5 +236,8 @@ card:
 - **Stuck or blank in the Companion app** — its webview caches hard, and a
   half-loaded module can wedge the card in a way a page reload won't clear.
   Force-close and reopen the app.
+- **Vertical strip is a thin sliver, or invisible** — it's nested inside a
+  `grid` card, which gives it no height to fill. Put it directly in the section
+  with `grid_options`, or set an explicit `height`.
 - **`401` in the add-on log** — an iframe card is still pointing at the Ingress
   path somewhere. This card doesn't hit that, so it's a leftover card.

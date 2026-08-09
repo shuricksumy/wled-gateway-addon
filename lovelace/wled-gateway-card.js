@@ -30,7 +30,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.5.0";
+const CARD_VERSION = "1.6.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -270,17 +270,29 @@ class WledGatewayCard extends HTMLElement {
     // used alone they'd overflow a smaller grid cell and simply be clipped —
     // which on a rotated strip hides the lit end and looks like a dead card.
     // With fill still applied they cap at the cell instead.
+    // Floor for fill mode. Filling only works when something above gives the
+    // card a definite height — nested inside another grid card, for instance,
+    // nothing does, and the preview collapses to a sliver. This keeps it
+    // visible there: a tall shape for anything drawn vertically, a bar
+    // otherwise.
+    const rot = this._rotation();
+    const tall = cfg.view === "matrix" || rot === 90 || rot === 270;
+    const floor = tall ? "120px" : "24px";
+
     let sizing = "";
     if (cfg.fill) {
       sizing += `
         :host { display: block; height: 100%; }
         ha-card { height: 100%; display: flex; flex-direction: column; }
-        .wrap { flex: 1 1 auto; min-height: 24px; }`;
+        .wrap { flex: 1 1 auto; min-height: ${floor}; }`;
     }
+    // No max-height here: a percentage max-height against a parent that
+    // resolves to zero height collapses the preview to nothing, which is worse
+    // than overflowing. ha-card clips the overflow instead.
     if (cfg.height) {
-      sizing += `\n.wrap { flex: 0 1 auto; height: ${cfg.height};${cfg.fill ? " max-height: 100%;" : ""} }`;
+      sizing += `\n.wrap { flex: 0 0 auto; height: ${cfg.height}; }`;
     } else if (ratio) {
-      sizing += `\n.wrap { flex: 0 1 auto; aspect-ratio: ${ratio}; width: 100%;${cfg.fill ? " max-height: 100%;" : ""} }`;
+      sizing += `\n.wrap { flex: 0 0 auto; aspect-ratio: ${ratio}; width: 100%; }`;
     } else if (!cfg.fill) {
       sizing += `\n.wrap { height: ${cfg.view === "matrix" ? "180px" : "40px"}; }`;
     }

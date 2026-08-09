@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from aiohttp import ClientSession, WSMsgType, web
@@ -35,7 +36,7 @@ CARD_SOURCE = Path("/app/www/wled-gateway-card.js")
 # Supervisor gives us, so look rather than assume — and if it isn't there,
 # carry on without it.
 HA_CONFIG_DIRS = (Path("/homeassistant"), Path("/config"))
-card_status = {"installed": False, "path": None, "detail": "not attempted yet"}
+card_status = {"installed": False, "path": None, "detail": "not attempted yet", "resource": None}
 
 
 def install_lovelace_card():
@@ -118,6 +119,9 @@ OPTIONS = json.loads(OPTIONS_PATH.read_text())
 # entity id into the config. When left unset, each device gets a predictable
 # input_select.wled_effect_<id>, created on first connect if it's missing.
 AUTO_CREATE_HELPERS = OPTIONS.get("auto_create_helpers", True)
+# Registering the card as a dashboard resource is the last manual step; doing it
+# here also keeps its ?v= in step with the installed version.
+AUTO_REGISTER_CARD = OPTIONS.get("auto_register_card", True)
 
 
 def load_devices():
@@ -480,40 +484,112 @@ async def ha_entity_exists(app, entity_id):
         return None
 
 
+class HAWebSocketError(Exception):
+    """A command came back as a failure result rather than a transport problem."""
+
+    def __init__(self, error):
+        super().__init__(error.get("message") or str(error))
+        self.code = error.get("code")
+        self.error = error
+
+
+class HAWebSocket:
+    """Thin request/response wrapper: HA's websocket API matches replies to
+    commands by id, and several things here need more than one command."""
+
+    def __init__(self, ws):
+        self._ws = ws
+        self._id = 0
+
+    async def call(self, command_type, **payload):
+        self._id += 1
+        command_id = self._id
+        await self._ws.send_json({"id": command_id, "type": command_type, **payload})
+        while True:
+            msg = await self._ws.receive_json(timeout=10)
+            if msg.get("type") == "result" and msg.get("id") == command_id:
+                if msg.get("success"):
+                    return msg.get("result")
+                raise HAWebSocketError(msg.get("error") or {})
+
+
+@asynccontextmanager
+async def ha_websocket(app):
+    """Authenticated connection to Home Assistant. Several things the add-on
+    does — creating helpers, registering the card — have no REST equivalent."""
+    async with app["session"].ws_connect(HA_WS, timeout=10) as ws:
+        hello = await ws.receive_json(timeout=10)
+        if hello.get("type") != "auth_required":
+            raise RuntimeError(f"unexpected greeting: {hello.get('type')}")
+        await ws.send_json({"type": "auth", "access_token": SUPERVISOR_TOKEN})
+        auth = await ws.receive_json(timeout=10)
+        if auth.get("type") != "auth_ok":
+            raise RuntimeError(f"auth failed: {auth}")
+        yield HAWebSocket(ws)
+
+
 async def ha_create_input_select(app, name, options):
     """Create an input_select helper. There's no REST endpoint for this — helper
     creation only exists on the WebSocket API, and it requires an admin token."""
     try:
-        async with app["session"].ws_connect(HA_WS, timeout=10) as ws:
-            hello = await ws.receive_json(timeout=10)
-            if hello.get("type") != "auth_required":
-                log.warning("unexpected HA websocket greeting: %s", hello.get("type"))
-                return False
-            await ws.send_json({"type": "auth", "access_token": SUPERVISOR_TOKEN})
-            auth = await ws.receive_json(timeout=10)
-            if auth.get("type") != "auth_ok":
-                log.warning("HA websocket auth failed: %s", auth)
-                return False
-
-            await ws.send_json({"id": 1, "type": "input_select/create", "name": name, "options": options})
-            while True:
-                msg = await ws.receive_json(timeout=10)
-                if msg.get("type") == "result" and msg.get("id") == 1:
-                    if msg.get("success"):
-                        return True
-                    error = msg.get("error", {})
-                    if error.get("code") == "unauthorized":
-                        log.warning(
-                            "not allowed to create helpers — create %r by hand, or set it "
-                            "explicitly per device with input_select:",
-                            name,
-                        )
-                    else:
-                        log.warning("HA refused to create helper %r: %s", name, error)
-                    return False
+        async with ha_websocket(app) as ha:
+            await ha.call("input_select/create", name=name, options=options)
+            return True
+    except HAWebSocketError as e:
+        if e.code == "unauthorized":
+            log.warning(
+                "not allowed to create helpers — create %r by hand, or set it "
+                "explicitly per device with input_select:",
+                name,
+            )
+        else:
+            log.warning("HA refused to create helper %r: %s", name, e)
+        return False
     except Exception as e:
         log.warning("could not create helper %r over the HA websocket: %s", name, e)
         return False
+
+
+CARD_RESOURCE_PATH = "/local/wled-gateway-card.js"
+
+
+async def register_lovelace_resource(app):
+    """Register the card as a dashboard resource, and keep its ?v= in step with
+    the installed version so browsers pick up a new card after an update.
+
+    Only possible on storage-mode dashboards: with Lovelace in YAML mode the
+    resource list is part of your configuration.yaml and isn't ours to edit."""
+    version = card_version() or "1"
+    wanted = f"{CARD_RESOURCE_PATH}?v={version}"
+    try:
+        async with ha_websocket(app) as ha:
+            existing = await ha.call("lovelace/resources/list")
+            mine = next(
+                (r for r in existing or [] if str(r.get("url", "")).split("?")[0] == CARD_RESOURCE_PATH),
+                None,
+            )
+            if mine is None:
+                await ha.call("lovelace/resources/create", res_type="module", url=wanted)
+                card_status["resource"] = f"registered as {wanted}"
+                log.info("registered lovelace resource %s", wanted)
+            elif mine.get("url") != wanted:
+                await ha.call("lovelace/resources/update", resource_id=mine["id"], url=wanted)
+                card_status["resource"] = f"updated to {wanted}"
+                log.info("updated lovelace resource to %s", wanted)
+            else:
+                card_status["resource"] = f"already registered as {wanted}"
+    except HAWebSocketError as e:
+        by_hand = f"add {wanted} as a JavaScript module by hand"
+        if e.code == "unknown_command":
+            card_status["resource"] = f"dashboards are in YAML mode, so {by_hand}"
+        elif e.code == "unauthorized":
+            card_status["resource"] = f"not allowed to edit dashboard resources, so {by_hand}"
+        else:
+            card_status["resource"] = f"could not register ({e}), so {by_hand}"
+        log.warning("could not register the lovelace resource: %s", e)
+    except Exception as e:
+        card_status["resource"] = f"could not register: {e}"
+        log.warning("could not register the lovelace resource: %s", e)
 
 
 async def sync_effect_list(app, dev_id, ip, input_select_entity):
@@ -899,8 +975,8 @@ Ingress URL can't, and returns 401 until this page is opened by hand.</p>
 <p>Then paste a card. This add-on's slug is filled in for you:</p>
 <pre id="yaml">{yaml}</pre>
 <button onclick="navigator.clipboard.writeText(document.getElementById('yaml').textContent)">Copy</button>
-<p><small>Installed at <code>{path}</code> ({detail}). After an add-on update,
-bump the <code>?v=</code> on the resource so browsers fetch the new copy.</small></p>"""
+<p><small>Installed at <code>{path}</code> ({detail}). Dashboard resource:
+{resource}.</small></p>"""
 
 
 async def handle_index(request):
@@ -936,6 +1012,7 @@ async def handle_index(request):
             yaml=html.escape(yaml_snippet),
             path=html.escape(card_status["path"] or ""),
             detail=html.escape(card_status["detail"]),
+            resource=html.escape(card_status["resource"] or "not registered by the add-on"),
         )
     else:
         card_section = CARD_SECTION_UNAVAILABLE.format(detail=html.escape(card_status["detail"]))
@@ -949,6 +1026,8 @@ async def handle_index(request):
 async def on_startup(app):
     app["session"] = ClientSession()
     install_lovelace_card()
+    if card_status["installed"] and AUTO_REGISTER_CARD:
+        await register_lovelace_resource(app)
     app["slug"] = await fetch_own_slug(app)
     app["upstream_tasks"] = [
         asyncio.create_task(upstream_loop(app, dev_id, dev["ip"], dev.get("input_select")))

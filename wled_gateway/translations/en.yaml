@@ -6,6 +6,14 @@ configuration:
       doesn't name one below — called input_select.wled_effect_<id> and kept
       filled with that device's real effect list. Dropdowns you already have
       are never changed. Turn this off to create and name them yourself.
+  auto_register_card:
+    name: Add the preview card to your dashboards
+    description: >-
+      Installs the WLED Gateway card into Home Assistant and registers it as a
+      dashboard resource, so it's ready to use and updates along with the
+      add-on. Turn this off to manage the card yourself. Registration only works
+      on storage-mode dashboards; with Lovelace in YAML mode the add-on says so
+      on its own page and changes nothing.
   devices:
     name: WLED devices
     description: >-

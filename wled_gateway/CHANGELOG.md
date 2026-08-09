@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.0
+- The card is now registered as a dashboard resource for you, so there's
+  nothing left to do by hand: install the add-on, and the card is available.
+  An entry you added yourself is adopted rather than duplicated.
+- The `?v=` on that resource is kept in step with the card, so an add-on update
+  no longer needs a manual cache-bust to take effect.
+- New `auto_register_card` option (default on) to turn both off. Registration
+  needs storage-mode dashboards and an admin token; where neither holds, the
+  add-on's page says which applies and what to add by hand, and changes
+  nothing.
+
 ## 1.8.0
 - The Lovelace card now ships with the add-on and is installed into
   `<config>/www` on startup, so it no longer has to be copied by hand and can't

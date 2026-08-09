@@ -23,13 +23,12 @@ resized like any other card.
 
 ## Install
 
-The add-on copies the card into `<config>/www` on startup, so there's no file to
-move by hand and it updates with the add-on. Two steps remain:
+Nothing, if you're running the add-on: it installs the card into
+`<config>/www` and registers it as a dashboard resource on startup. Add a card
+and it works.
 
-1. Open the add-on's **Web UI**. Under *Lovelace card* it shows the resource URL
-   to register and a ready-made card with your slug already filled in.
-2. Add that URL under **Settings → Dashboards → Resources** as a **JavaScript
-   module**, then paste the card.
+The add-on's **Web UI** shows a ready-made card with your slug already filled
+in, plus what it did with the resource.
 
 ```yaml
 type: custom:wled-gateway-card
@@ -44,21 +43,21 @@ mistake — the card accepts either.
 
 ### Updating the card
 
-An add-on update replaces the file, but browsers cache it by URL, so bump the
-version query on the resource to match:
+An add-on update replaces the file and bumps the `?v=` on the resource, which is
+what makes browsers fetch it — so there's nothing to do. The card logs the
+version it loaded to the browser console if you want to confirm.
 
-```
-/local/wled-gateway-card.js?v=1.8.0
-```
+### Doing it by hand
 
-The add-on's page shows the current version in that URL, and the card logs the
-version it loaded to the browser console — so a mismatch is visible.
-
-### Installing it by hand
-
-If the add-on can't write to your config folder it says so on its page, and
+Turn off **Add the preview card to your dashboards** in the add-on's
+configuration, or run without the add-on's help entirely: copy
 [`wled_gateway/www/wled-gateway-card.js`](../wled_gateway/www/wled-gateway-card.js)
-can be copied to `<config>/www/` yourself.
+to `<config>/www/` and add `/local/wled-gateway-card.js` under **Settings →
+Dashboards → Resources** as a **JavaScript module**.
+
+The add-on also falls back to this automatically: registration needs
+storage-mode dashboards and an admin token, and where that isn't the case its
+page says so and leaves your configuration alone.
 
 ---
 

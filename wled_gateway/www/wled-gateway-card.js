@@ -21,7 +21,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.11.0";
+const CARD_VERSION = "1.12.0";
 const CARD_TAG_CONFIG = "custom:wled-gateway-card";
 
 /* ------------------------------------------------------------------ *
@@ -632,6 +632,10 @@ class WledGatewayCard extends HTMLElement {
 
   _stop() {
     this._started = false;
+    if (this._rafId && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(this._rafId);
+    }
+    this._frameScheduled = false;
     if (this._retry) {
       clearTimeout(this._retry);
       this._retry = null;
@@ -663,16 +667,28 @@ class WledGatewayCard extends HTMLElement {
     const bytes = new Uint8Array(event.data);
     if (bytes[0] !== 76) return; // 'L' — WLED live-view frame
 
-    const offset = bytes[1] === 2 ? 4 : 2;
-    let frameMax = 0;
-    for (let i = offset; i < bytes.length; i++) {
-      if (bytes[i] > frameMax) frameMax = bytes[i];
-    }
-    this._notePeak(frameMax);
-    this._recomputeFactor();
-
+    // A device can send frames faster than the display refreshes. Keep only the
+    // newest and draw once per animation frame, so the extra ones cost nothing
+    // — measuring and scaling them would be work thrown away.
     this._lastFrame = bytes;
-    this._paint(bytes);
+    if (this._frameScheduled) return;
+    this._frameScheduled = true;
+    const draw = () => {
+      this._frameScheduled = false;
+      const frame = this._lastFrame;
+      if (!frame || !this.isConnected) return;
+
+      const offset = frame[1] === 2 ? 4 : 2;
+      let frameMax = 0;
+      for (let i = offset; i < frame.length; i++) {
+        if (frame[i] > frameMax) frameMax = frame[i];
+      }
+      this._notePeak(frameMax);
+      this._recomputeFactor();
+      this._paint(frame);
+    };
+    if (typeof requestAnimationFrame === "function") this._rafId = requestAnimationFrame(draw);
+    else draw();
   }
 
   // from/to select a slice of the strip, for one segment of a longer run. Only

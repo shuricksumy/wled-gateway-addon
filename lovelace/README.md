@@ -270,6 +270,12 @@ when the device comes back.
 This has to come from the add-on: the card's own connection is to the add-on,
 not to the device, and stays up whether or not the device does.
 
+## Frame rate
+
+A device can send frames faster than a screen refreshes. The card keeps only
+the newest and draws once per animation frame, so surplus frames cost nothing
+— they're never measured or scaled, only the drawn ones are.
+
 ## Idle behaviour
 
 A card that isn't being looked at — scrolled out of view, on a hidden tab, or a

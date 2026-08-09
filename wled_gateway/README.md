@@ -120,6 +120,18 @@ This needs the add-on's `homeassistant_api: true` permission (already set
 in `config.json`), which gives it a `SUPERVISOR_TOKEN` to call
 `http://supervisor/core/api/...` on Home Assistant's behalf.
 
+## Status entities
+
+Each device gets a `binary_sensor` named after it — `binary_sensor.wled_gateway_sasha`
+— which is `on` while the device is reachable, with the viewer count, frame
+rate, brightness and streaming state as attributes. Enough for an automation
+that tells you when a strip drops off.
+
+An add-on can't register a real integration, so these are set straight through
+Home Assistant's states API. The trade-off is that they disappear when Home
+Assistant restarts; the add-on republishes them within a minute. Turn them off
+with `publish_status_entities` if you'd rather not have them.
+
 ## Idle devices
 
 Live view is only requested while something is actually watching: it's switched

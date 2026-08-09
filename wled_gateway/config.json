@@ -1,6 +1,6 @@
 {
   "name": "WLED Gateway",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "slug": "wled_gateway",
   "description": "Single endpoint for WLED live-preview: holds the one live-view connection each WLED device allows and fans it out to multiple dashboard viewers at once.",
   "url": "https://github.com/shuricksumy/wled-gateway-addon",
@@ -30,6 +30,7 @@
   "options": {
     "auto_create_helpers": true,
     "auto_register_card": true,
+    "publish_status_entities": true,
     "devices": [
       {
         "id": "1",
@@ -66,6 +67,7 @@
   "schema": {
     "auto_create_helpers": "bool?",
     "auto_register_card": "bool?",
+    "publish_status_entities": "bool?",
     "devices": [
       {
         "id": "str",

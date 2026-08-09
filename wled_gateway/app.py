@@ -122,6 +122,8 @@ AUTO_CREATE_HELPERS = OPTIONS.get("auto_create_helpers", True)
 # Registering the card as a dashboard resource is the last manual step; doing it
 # here also keeps its ?v= in step with the installed version.
 AUTO_REGISTER_CARD = OPTIONS.get("auto_register_card", True)
+# A binary_sensor per device, so automations can react to one going offline.
+PUBLISH_STATUS_ENTITIES = OPTIONS.get("publish_status_entities", True)
 
 
 def load_devices():
@@ -159,11 +161,13 @@ device_status = {
 FPS_WINDOW_SECONDS = 5
 
 
-async def measure_frame_rates():
+async def measure_frame_rates(app):
     """Turn the running frame counters into a rate, on a fixed window so the
     number on the page means the same thing every time it's read."""
+    ticks = 0
     while True:
         await asyncio.sleep(FPS_WINDOW_SECONDS)
+        ticks += 1
         now = time.time()
         for dev_id, status in device_status.items():
             started = status["frames_since"]
@@ -171,6 +175,11 @@ async def measure_frame_rates():
             status["fps"] = round(status["frames"] / elapsed, 1) if elapsed > 0 else 0.0
             status["frames"] = 0
             status["frames_since"] = now
+        # Normally only when something changed; every minute regardless, since
+        # states set this way are lost across a Home Assistant restart.
+        force = ticks % 12 == 0
+        for dev_id in DEVICES:
+            await publish_status(app, dev_id, force=force)
 
 PREVIEW_HTML = """<!DOCTYPE html>
 <html>
@@ -802,6 +811,59 @@ def cancel_idle_timer(dev_id):
         task.cancel()
 
 
+def status_entity_id(dev_id):
+    dev = DEVICES[dev_id]
+    return f"binary_sensor.wled_gateway_{slugify(dev.get('name') or dev_id)}"
+
+
+last_published = {}
+
+
+async def publish_status(app, dev_id, force=False):
+    """Mirror a device's state into a Home Assistant entity, so automations can
+    act on one dropping off.
+
+    Set through the states API rather than a real integration: an add-on has no
+    way to register one. The trade-off is that these disappear when Home
+    Assistant restarts — which is why they're republished periodically rather
+    than only when something changes."""
+    if not PUBLISH_STATUS_ENTITIES or not SUPERVISOR_TOKEN:
+        return
+    dev = DEVICES[dev_id]
+    status = device_status[dev_id]
+    payload = {
+        "state": "on" if status["connected"] else "off",
+        "attributes": {
+            "friendly_name": f"{dev['name']} preview",
+            "device_class": "connectivity",
+            "icon": "mdi:led-strip-variant",
+            "device": dev_id,
+            "ip": dev["ip"],
+            "viewers": len(subscribers[dev_id]),
+            "fps": status["fps"],
+            "brightness": status["bri"],
+            "streaming": bool(live_view_on.get(dev_id)),
+        },
+    }
+    if not force and last_published.get(dev_id) == payload:
+        return
+
+    entity_id = status_entity_id(dev_id)
+    try:
+        async with app["session"].post(
+            f"{HA_API}/states/{entity_id}",
+            json=payload,
+            headers={"Authorization": f"Bearer {SUPERVISOR_TOKEN}", "Content-Type": "application/json"},
+            timeout=5,
+        ) as resp:
+            if resp.status >= 300:
+                log.warning("could not publish %s: %s", entity_id, resp.status)
+                return
+        last_published[dev_id] = payload
+    except Exception as e:
+        log.warning("could not publish %s: %s", entity_id, e)
+
+
 def extract_brightness(payload):
     """Pull master brightness out of a WLED state push. Live-preview pixel data
     arrives already scaled by it, so viewers need it to undo that scaling."""
@@ -844,6 +906,7 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                 # Viewers can't tell a dead device from a quiet one: their socket
                 # is to us, and it stays up either way.
                 await fanout(dev_id, text=json.dumps({"connected": True}))
+                await publish_status(app, dev_id)
                 await sync_effect_list(app, dev_id, ip, input_select_entity)
                 backoff = 1
                 async for msg in ws:
@@ -880,6 +943,7 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
         device_status[dev_id]["fps"] = 0.0
         if was_connected:
             await fanout(dev_id, text=json.dumps({"connected": False}))
+        await publish_status(app, dev_id)
         await asyncio.sleep(backoff)
         backoff = min(backoff * 2, 30)
 
@@ -1200,7 +1264,7 @@ async def on_startup(app):
     if card_status["installed"] and AUTO_REGISTER_CARD:
         await register_lovelace_resource(app)
     app["slug"] = await fetch_own_slug(app)
-    app["fps_task"] = asyncio.create_task(measure_frame_rates())
+    app["fps_task"] = asyncio.create_task(measure_frame_rates(app))
     app["upstream_tasks"] = [
         asyncio.create_task(upstream_loop(app, dev_id, dev["ip"], dev.get("input_select")))
         for dev_id, dev in DEVICES.items()

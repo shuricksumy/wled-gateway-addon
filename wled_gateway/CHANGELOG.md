@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.13.0
+- Each device now has a `binary_sensor` showing whether it's reachable, named
+  after the device — `binary_sensor.wled_gateway_sasha` — with viewers, frame
+  rate, brightness and whether it's streaming as attributes. Enough to notify
+  yourself when a strip drops off. `publish_status_entities` turns it off.
+  These are set directly rather than by an integration, which is the only route
+  open to an add-on: they're lost when Home Assistant restarts, so they're
+  refreshed every minute.
+- Card: frames are drawn once per animation frame rather than once per message.
+  A device sending faster than the screen refreshes no longer causes work that
+  is immediately thrown away — measuring and scaling now happen only for frames
+  that actually get drawn.
+
 ## 1.12.0
 - An unreachable device now looks unreachable. Previews sat on their last frame
   when a device dropped off, which is indistinguishable from a strip that

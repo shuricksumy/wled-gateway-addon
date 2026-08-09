@@ -14,6 +14,14 @@ configuration:
       add-on. Turn this off to manage the card yourself. Registration only works
       on storage-mode dashboards; with Lovelace in YAML mode the add-on says so
       on its own page and changes nothing.
+  publish_status_entities:
+    name: Create a status entity per device
+    description: >-
+      Publishes a binary_sensor for each device showing whether it's reachable,
+      with the viewer count, frame rate and brightness as attributes — useful
+      for an automation that notifies you when a strip drops off. These are set
+      directly rather than by a real integration, so they disappear when Home
+      Assistant restarts and are republished within a minute.
   devices:
     name: WLED devices
     description: >-

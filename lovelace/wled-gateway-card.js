@@ -90,22 +90,46 @@ function ensureSession(hass) {
 
 const ingressPaths = {};
 
-function resolveIngressPath(hass, slug) {
-  if (ingressPaths[slug]) return ingressPaths[slug];
+// The slug separates its parts with underscores (71966d0e_wled_gateway), but
+// the add-on's hostname uses dashes (71966d0e-wled-gateway) and is the easier
+// of the two to copy by mistake. Try what was given first, then the other
+// spelling, so either works.
+function slugCandidates(slug) {
+  const tries = [slug];
+  if (slug.includes("-")) tries.push(slug.replace(/-/g, "_"));
+  if (slug.includes("_")) tries.push(slug.replace(/_/g, "-"));
+  return [...new Set(tries)];
+}
 
-  ingressPaths[slug] = hass
-    .callWS({ type: "supervisor/api", endpoint: `/addons/${slug}/info`, method: "get" })
-    .then((info) => {
+async function lookupIngressPath(hass, slug) {
+  const errors = [];
+  for (const candidate of slugCandidates(slug)) {
+    try {
+      const info = await hass.callWS({
+        type: "supervisor/api",
+        endpoint: `/addons/${candidate}/info`,
+        method: "get",
+      });
       if (!info || !info.ingress_url) {
-        throw new Error(`add-on "${slug}" has no ingress URL — is Ingress enabled?`);
+        throw new Error(`"${candidate}" has no ingress URL — is Ingress enabled for it?`);
       }
       return info.ingress_url.replace(/\/$/, "");
-    })
-    .catch((err) => {
-      delete ingressPaths[slug];
-      throw err;
-    });
+    } catch (err) {
+      errors.push(`${candidate}: ${err && err.message ? err.message : err}`);
+    }
+  }
+  throw new Error(
+    `no add-on found. Tried ${errors.join(" | ")}. ` +
+      `The slug is in the add-on's page URL: /hassio/addon/<slug>/info`
+  );
+}
 
+function resolveIngressPath(hass, slug) {
+  if (ingressPaths[slug]) return ingressPaths[slug];
+  ingressPaths[slug] = lookupIngressPath(hass, slug).catch((err) => {
+    delete ingressPaths[slug];
+    throw err;
+  });
   return ingressPaths[slug];
 }
 

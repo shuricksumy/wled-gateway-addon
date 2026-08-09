@@ -52,10 +52,13 @@ extra authentication to set up.
 
 | | |
 | --- | --- |
-| 🎛️ **Live preview, 1D and 2D** | A gradient bar for strips, a dot-matrix canvas for panels — embeddable in any Lovelace card. |
-| 🔄 **Effect list sync** | Keeps your `input_select` effect dropdowns matched to each device's real, live effect list — no helper automation needed. |
+| 🎴 **A Lovelace card** | Installed and registered for you, with a visual editor. Strips, matrices and rings, at any rotation. Unlike an iframe it authenticates itself, so previews survive the app switching between your local and remote URLs. |
+| ➕ **Add devices in one click** | Home Assistant already knows your WLED devices and their addresses — the add-on lists them and adds them to its own configuration, so there's no IP to type. |
+| 🔄 **Effect dropdowns, made and kept current** | Creates an `input_select` per device and fills it with that device's real, live effect list. No helper to create, no automation to write. |
 | 🖥️ **Device web UI proxy** | Open or embed each device's own WLED admin interface from inside Home Assistant, without hunting down its IP. |
-| 📊 **Live status** | A built-in info page showing every configured device, its connection state, and its ready-to-copy Ingress URLs. |
+| 🔆 **Previews that don't just go dark** | A dimmed strip still reads clearly, scaled back up by as much as the frames themselves justify — or pinned to a constant if you prefer. |
+| 💤 **Idle when nobody's looking** | Devices are only asked to stream while something is actually watching, so an unopened dashboard costs your strips nothing. |
+| 📊 **Diagnostics** | Per device: connection state, viewers, frame rate, brightness — so "the preview looks wrong" is something you can read off a page. |
 
 ---
 
@@ -64,8 +67,11 @@ extra authentication to set up.
 [![Open your Home Assistant instance and show the add add-on repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fshuricksumy%2Fwled-gateway-addon)
 
 Click the button — Home Assistant opens the **Add repository** dialog with the URL
-already filled in. Confirm it, then install **WLED Gateway** from the store, list your
-devices under **Configuration**, and start it.
+already filled in. Confirm it, then install **WLED Gateway** from the store and start it.
+
+Open its **Web UI** and add your devices from the list it found in Home Assistant — no
+addresses to type. The Lovelace card is installed and registered at the same time, so
+**Add card → WLED Gateway preview** works straight away.
 
 <details>
 <summary><b>Or add the repository by hand</b></summary>
@@ -80,7 +86,7 @@ devices under **Configuration**, and start it.
    https://github.com/shuricksumy/wled-gateway-addon
    ```
 
-4. Install **WLED Gateway**, list your devices under **Configuration**, and start it.
+4. Install **WLED Gateway** and start it, then add your devices from its Web UI.
 
 </details>
 
@@ -98,8 +104,8 @@ options, the endpoint reference, and copy-pasteable Lovelace card examples.
 
 | Document | What's in it |
 | --- | --- |
-| 📖 **[Add-on README](wled_gateway/README.md)** | Configuration, effect sync, endpoints, Lovelace card examples, troubleshooting. |
-| 🎴 **[Lovelace card](lovelace/README.md)** | Optional custom card — renders the preview without an iframe, so it keeps working when the app switches between your local and remote URLs. |
+| 📖 **[Add-on README](wled_gateway/README.md)** | Configuration, effect sync, preview brightness, endpoints, iframe card examples, troubleshooting. |
+| 🎴 **[Lovelace card](lovelace/README.md)** | The card the add-on installs: every option, the four shapes, and worked examples. |
 | 📝 **[Changelog](wled_gateway/CHANGELOG.md)** | Release history. |
 | 🛠️ **[Development](DEVELOPMENT.md)** | Running the add-on locally, with a faster loop than a full Supervisor install. |
 

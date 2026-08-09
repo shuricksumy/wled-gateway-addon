@@ -18,16 +18,24 @@ Runs with Ingress enabled, so it's reachable through Home Assistant itself —
 local IP, local domain, external tunnel — with no separate networking,
 reverse proxy, or port forwarding to set up.
 
-It also keeps any `input_select` effect dropdowns in your dashboard synced
-to each device's real, live effect list — no separate automation needed,
-and it can proxy each device's own admin web UI so you can open or embed it
-directly from Home Assistant for setup and debugging.
+Beyond the previews it takes care of the fiddly parts: devices are added from
+the list Home Assistant already has rather than by typing addresses, each one
+gets an `input_select` of its real effect list, the [Lovelace
+card](../lovelace/README.md) is installed and registered for you, and each
+device's own admin web UI can be opened or embedded without hunting for its IP.
+
+Its own page shows what every device is doing — connected or not, how many
+viewers, and the frame rate it's delivering.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for release history, and
 [`../DEVELOPMENT.md`](../DEVELOPMENT.md) if you're changing this add-on
 yourself and want a faster test loop than a full Supervisor install cycle.
 
 ## Configuration
+
+The quickest way to add a device is the add-on's own **Web UI**: it lists the
+WLED devices Home Assistant already knows about and adds the one you pick,
+address and all. Everything below is the same list, edited by hand.
 
 Go to the add-on's **Configuration** tab and list your devices:
 

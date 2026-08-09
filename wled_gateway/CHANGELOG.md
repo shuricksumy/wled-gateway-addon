@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.1
+- Fix a card added from the editor saving without its type, which Home
+  Assistant then rejected as "No type provided". Filling in the add-on on a
+  blank config rebuilt the config from the form's own fields, and the type
+  isn't one of them.
+
 ## 1.11.0
 - Add devices without typing an address. Home Assistant already knows every
   WLED device and where it lives, so the add-on's page now lists them, marks

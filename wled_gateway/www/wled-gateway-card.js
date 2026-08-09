@@ -21,7 +21,8 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.10.0";
+const CARD_VERSION = "1.10.1";
+const CARD_TAG_CONFIG = "custom:wled-gateway-card";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -199,9 +200,9 @@ class WledGatewayCard extends HTMLElement {
     try {
       const slug = await findAddonSlug(hass);
       const devices = await listDevices(hass, slug);
-      return { addon: slug, device: Object.keys(devices)[0] || "1" };
+      return { type: CARD_TAG_CONFIG, addon: slug, device: Object.keys(devices)[0] || "1" };
     } catch (err) {
-      return { addon: "", device: "1" };
+      return { type: CARD_TAG_CONFIG, addon: "", device: "1" };
     }
   }
 
@@ -898,6 +899,10 @@ class WledGatewayCardEditor extends HTMLElement {
   }
 
   _emit(config) {
+    // Never emit a config without the card type. ha-form hands back only the
+    // fields it rendered, and autofill can fire on an empty config, so type has
+    // to be put back or Home Assistant saves a card it can't identify.
+    config = { type: CARD_TAG_CONFIG, ...config };
     this._config = config;
     this._loadDevices();
     this._render();

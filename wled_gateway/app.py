@@ -61,13 +61,14 @@ def load_devices():
             "name": dev.get("name", dev_id),
             "ip": dev["ip"],
             "input_select": configured or (default_input_select(dev_id) if AUTO_CREATE_HELPERS else None),
+            "full_brightness_preview": bool(dev.get("full_brightness_preview", True)),
         }
     return devices
 
 
 DEVICES = load_devices()
 subscribers = {dev_id: set() for dev_id in DEVICES}
-device_status = {dev_id: {"connected": False, "last_connected_at": None} for dev_id in DEVICES}
+device_status = {dev_id: {"connected": False, "last_connected_at": None, "bri": None} for dev_id in DEVICES}
 
 PREVIEW_HTML = """<!DOCTYPE html>
 <html>
@@ -78,7 +79,7 @@ PREVIEW_HTML = """<!DOCTYPE html>
   <title>WLED Live Preview</title>
   <style>
   html, body { margin: 0; background: #000; overflow: hidden; width: 100%; height: 100%; }
-  #canv { position: absolute; transform-origin: center center; background: #000; filter: brightness(175%); }
+  #canv { position: absolute; transform-origin: center center; background: #000; }
   * { box-sizing: border-box; }
   </style>
   <script>
@@ -88,6 +89,34 @@ PREVIEW_HTML = """<!DOCTYPE html>
     }
     var wledId = getUrlParameter('wled', '1');
     var rotate = parseInt(getUrlParameter('rotate', '0'));
+
+    // Live-preview pixels arrive already scaled by the device's master
+    // brightness, so a dimmed strip previews dim. Undo that scaling to show the
+    // colours at full strength. Defaults to this device's add-on setting; a
+    // ?normalize=0/1 on the card URL overrides it for that card only.
+    var normalizeDefault = __NORMALIZE_DEFAULT__;
+    var normalizeParam = getUrlParameter('normalize');
+    var normalize = normalizeParam === null ? normalizeDefault : normalizeParam !== '0';
+    var gain = parseFloat(getUrlParameter('gain', '1')) || 1;
+    var briFactor = 1;
+    var MAX_BOOST = 10;  // below ~10% the data is already quantised; boosting
+                         // further just amplifies banding
+
+    function applyBrightness() {
+      const factor = Math.min(MAX_BOOST, Math.max(1, briFactor)) * gain;
+      document.getElementById("canv").style.filter =
+        factor === 1 ? '' : `brightness(${Math.round(factor * 100)}%)`;
+    }
+
+    function onStateMessage(raw) {
+      try {
+        const msg = JSON.parse(raw);
+        if (typeof msg.bri === 'number') {
+          briFactor = normalize ? 255 / Math.max(msg.bri, 1) : 1;
+          applyBrightness();
+        }
+      } catch (err) { /* not a state message we care about */ }
+    }
 
     function applyRotation() {
       const canv = document.getElementById("canv");
@@ -125,12 +154,14 @@ PREVIEW_HTML = """<!DOCTYPE html>
 
     function start() {
       applyRotation();
+      applyBrightness();
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${proto}//${window.location.host}${wsPrefix()}/ws/${wledId}`);
       ws.binaryType = "arraybuffer";
       ws.onopen = () => ws.send("{'lv':true}");
       ws.addEventListener("message", event => {
         try {
+          if (typeof event.data === "string") { onStateMessage(event.data); return; }
           if (Object.prototype.toString.call(event.data) !== "[object ArrayBuffer]") return;
           const bytes = new Uint8Array(event.data);
           if (bytes[0] !== 76) return;
@@ -181,6 +212,31 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
     const ctx = c.getContext("2d");
     let throttled = false;
 
+    // See the 1D preview: pixels arrive pre-scaled by master brightness, so
+    // undo it unless this device (or the card URL) asks for the true look.
+    var normalizeDefault = __NORMALIZE_DEFAULT__;
+    var normalizeParam = getUrlParameter('normalize');
+    var normalize = normalizeParam === null ? normalizeDefault : normalizeParam !== '0';
+    var gain = parseFloat(getUrlParameter('gain', '1')) || 1;
+    var briFactor = 1;
+    var MAX_BOOST = 10;
+
+    function applyBrightness() {
+      const factor = Math.min(MAX_BOOST, Math.max(1, briFactor)) * gain;
+      c.style.filter = factor === 1 ? '' : `brightness(${Math.round(factor * 100)}%)`;
+    }
+
+    function onStateMessage(raw) {
+      try {
+        const msg = JSON.parse(raw);
+        if (typeof msg.bri === 'number') {
+          briFactor = normalize ? 255 / Math.max(msg.bri, 1) : 1;
+          applyBrightness();
+        }
+      } catch (err) { /* not a state message we care about */ }
+    }
+    applyBrightness();
+
     function setCanvas() {
       c.width = 0.98 * window.innerWidth;
       c.height = 0.98 * window.innerHeight;
@@ -206,6 +262,7 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
       ws.onopen = () => ws.send("{'lv':true}");
       ws.addEventListener("message", event => {
         try {
+          if (typeof event.data === "string") { onStateMessage(event.data); return; }
           if (Object.prototype.toString.call(event.data) !== "[object ArrayBuffer]") return;
           const bytes = new Uint8Array(event.data);
           if (bytes[0] !== 76 || bytes[1] !== 2) return;
@@ -336,6 +393,33 @@ async def sync_effect_list(app, dev_id, ip, input_select_entity):
         log.warning("could not reach HA API to sync %s: %s", input_select_entity, e)
 
 
+def extract_brightness(payload):
+    """Pull master brightness out of a WLED state push. Live-preview pixel data
+    arrives already scaled by it, so viewers need it to undo that scaling."""
+    try:
+        data = json.loads(payload)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    state = data.get("state") if isinstance(data.get("state"), dict) else data
+    bri = state.get("bri")
+    return bri if isinstance(bri, int) and 0 <= bri <= 255 else None
+
+
+async def fanout(dev_id, *, data=None, text=None):
+    """Send to every viewer over a snapshot of the subscriber set — see the note
+    in upstream_loop about why this must not iterate the live set."""
+    for client in list(subscribers[dev_id]):
+        try:
+            if text is not None:
+                await client.send_str(text)
+            else:
+                await client.send_bytes(data)
+        except Exception:
+            subscribers[dev_id].discard(client)
+
+
 async def upstream_loop(app, dev_id, ip, input_select_entity):
     backoff = 1
     while True:
@@ -355,11 +439,14 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                         # RuntimeError, which the handler below would treat as a dead
                         # upstream — dropping the feed for every viewer just because
                         # one of them opened or closed a tab.
-                        for client in list(subscribers[dev_id]):
-                            try:
-                                await client.send_bytes(msg.data)
-                            except Exception:
-                                subscribers[dev_id].discard(client)
+                        await fanout(dev_id, data=msg.data)
+                    elif msg.type == WSMsgType.TEXT:
+                        # WLED pushes its state on this same socket, on connect and
+                        # whenever it changes. That's where brightness comes from.
+                        bri = extract_brightness(msg.data)
+                        if bri is not None and bri != device_status[dev_id]["bri"]:
+                            device_status[dev_id]["bri"] = bri
+                            await fanout(dev_id, text=json.dumps({"bri": bri}))
                     elif msg.type in (WSMsgType.CLOSED, WSMsgType.ERROR):
                         break
         except Exception as e:
@@ -377,6 +464,14 @@ async def handle_ws(request):
     await ws.prepare(request)
     subscribers[dev_id].add(ws)
     log.info("client subscribed to %s (now %d)", dev_id, len(subscribers[dev_id]))
+    # Send what we already know, so a card opened between state changes doesn't
+    # render un-normalised until the user next touches the brightness slider.
+    bri = device_status[dev_id]["bri"]
+    if bri is not None:
+        try:
+            await ws.send_str(json.dumps({"bri": bri}))
+        except Exception:
+            pass
     try:
         async for _ in ws:
             pass  # clients only ever send the initial {'lv':true}; nothing to act on
@@ -396,21 +491,35 @@ async def handle_json_live(request):
         return web.Response(body=body, content_type="application/json")
 
 
+def render_preview(template, dev_id):
+    """Bake this device's brightness setting into the page as the default. Plain
+    substitution rather than str.format, since the page is full of CSS and JS
+    braces that format() would choke on."""
+    default = "true" if DEVICES[dev_id]["full_brightness_preview"] else "false"
+    return template.replace("__NORMALIZE_DEFAULT__", default)
+
+
 async def handle_preview(request):
-    if request.query.get("wled", "1") not in DEVICES:
+    dev_id = request.query.get("wled", "1")
+    if dev_id not in DEVICES:
         raise web.HTTPNotFound()
-    return web.Response(text=PREVIEW_HTML, content_type="text/html")
+    return web.Response(text=render_preview(PREVIEW_HTML, dev_id), content_type="text/html")
 
 
 async def handle_preview2d(request):
-    if request.query.get("wled", "1") not in DEVICES:
+    dev_id = request.query.get("wled", "1")
+    if dev_id not in DEVICES:
         raise web.HTTPNotFound()
-    return web.Response(text=PREVIEW2D_HTML, content_type="text/html")
+    return web.Response(text=render_preview(PREVIEW2D_HTML, dev_id), content_type="text/html")
 
 
 async def handle_devices(request):
     return web.json_response({
-        dev_id: {**dev, "connected": device_status[dev_id]["connected"]}
+        dev_id: {
+            **dev,
+            "connected": device_status[dev_id]["connected"],
+            "bri": device_status[dev_id]["bri"],
+        }
         for dev_id, dev in DEVICES.items()
     })
 

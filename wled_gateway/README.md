@@ -51,6 +51,9 @@ devices:
   `input_select.wled_effect_<id>` (device `6` → `input_select.wled_effect_6`),
   created for you on first connect. Set this only to point a device at a
   helper you already have under a different name.
+- `full_brightness_preview` — optional, defaults to `true`. Shows the preview
+  at full strength regardless of how far the device is dimmed. See
+  [below](#preview-brightness).
 - `auto_create_helpers` — optional, defaults to `true`. Set it to `false` to
   stop the add-on creating helpers, in which case only devices with an
   explicit `input_select` are synced.
@@ -106,6 +109,38 @@ config is all that's needed to get a working, populated effect dropdown.
 This needs the add-on's `homeassistant_api: true` permission (already set
 in `config.json`), which gives it a `SUPERVISOR_TOKEN` to call
 `http://supervisor/core/api/...` on Home Assistant's behalf.
+
+## Preview brightness
+
+WLED's live view sends pixels **already scaled by the device's master
+brightness**, so a strip dimmed to 20% previews at 20% — nearly black on a
+dashboard, even though the card is only meant to show what's playing.
+
+By default the add-on scales that back up, so the preview reads at full
+strength whatever the device is set to. Colours are preserved: it divides out
+the reported brightness rather than just brightening everything. Untick
+**Preview at full brightness** on a device to see the strip exactly as it
+really looks.
+
+Per card, the URL wins over the setting:
+
+| Parameter | Effect |
+|---|---|
+| `&normalize=0` | True look — preview dims with the device |
+| `&normalize=1` | Full strength, whatever the device setting says |
+| `&gain=1.5` | Extra multiplier on top, if you want the preview to pop |
+
+```yaml
+type: iframe
+url: INGRESS/preview?wled=1&normalize=0   # this card only
+aspect_ratio: 5%
+```
+
+**Worth knowing**: at very low brightness the device has already crushed the
+colours into a handful of levels before sending them, so scaling back up looks
+grainy and banded. That detail is gone before the add-on ever sees it — the
+boost is capped at 10x for that reason. It's a dashboard preview, not a
+colour-accurate instrument.
 
 ## Finding your Ingress URL
 
@@ -179,8 +214,8 @@ automatically — no hunting through dashboards.
 
 | Path | What it does |
 |---|---|
-| `/preview?wled=<id>` | Linear preview — a single gradient bar of all LEDs. Good for LED strips. Optional `&rotate=90\|180\|270` to rotate the bar. |
-| `/preview2d?wled=<id>` | 2D preview — a dot-matrix canvas, for matrix/panel devices. |
+| `/preview?wled=<id>` | Linear preview — a single gradient bar of all LEDs. Good for LED strips. Optional `&rotate=90\|180\|270` to rotate the bar, `&normalize=0\|1` and `&gain=<n>` for [brightness](#preview-brightness). |
+| `/preview2d?wled=<id>` | 2D preview — a dot-matrix canvas, for matrix/panel devices. Takes the same `&normalize` / `&gain` as above. |
 | `/ws/<id>` | Raw relay WebSocket, if you're building your own frontend instead of using the built-in pages. |
 | `/json/<id>/live` | Passthrough to the device's own `/json/live` HTTP endpoint. |
 | `/devices` | JSON list of configured devices and live connection status, for debugging. |

@@ -25,6 +25,15 @@ configuration:
         name: IP address
         description: >-
           The device's address on your network, e.g. 192.168.1.50.
+      full_brightness_preview:
+        name: Preview at full brightness
+        description: >-
+          On by default. The preview normally dims along with the device,
+          because WLED sends the live view already scaled by its brightness —
+          this scales it back up so the colours always show at full strength.
+          Turn it off for this device to see the preview exactly as the strip
+          looks. Very low brightness will still look grainy, since the detail
+          is already lost before it reaches the add-on.
       input_select:
         name: Effect dropdown (optional)
         description: >-

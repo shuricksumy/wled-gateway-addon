@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.6.0
+- Previews no longer dim along with the device. WLED sends the live view
+  already scaled by master brightness, so a strip at 20% previewed at 20% —
+  nearly invisible on a dashboard. The add-on now reads the device's reported
+  brightness and scales the preview back up, preserving colour rather than
+  just brightening everything.
+- New per-device **Preview at full brightness** setting (on by default), with
+  `&normalize=0|1` on a card URL to override it per card, and `&gain=<n>` for
+  an extra multiplier.
+- Brightness is read from the state WLED already pushes on the live-view
+  socket — no extra polling — and is sent to viewers as they connect, so a
+  card opened between changes renders correctly straight away.
+- Removed the old hardcoded 175% brightness filter on the 1D preview, which
+  boosted everything regardless of the device.
+- `/devices` now reports each device's current brightness, for debugging.
+
 ## 1.5.1
 - The Configuration tab now reads as English instead of raw schema keys:
   `auto_create_helpers` and every field in the Add-device dialog (ID, Name,

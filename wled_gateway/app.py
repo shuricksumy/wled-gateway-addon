@@ -498,6 +498,53 @@ async def sync_effect_list(app, dev_id, ip, input_select_entity):
         log.warning("could not reach HA API to sync %s: %s", input_select_entity, e)
 
 
+# Live sockets to the devices, so a viewer arriving or leaving can turn their
+# live view on and off. Sending it forever would keep every device streaming
+# frames over WiFi around the clock, whether or not anyone has a dashboard open.
+upstream_ws = {}
+idle_tasks = {}
+live_view_on = {}
+IDLE_GRACE_SECONDS = 10
+
+
+async def set_live_view(dev_id, enabled, force=False):
+    """force is for a fresh connection, where the device has forgotten whatever
+    we last told it and our idea of the current state means nothing."""
+    enabled = bool(enabled)
+    if not force and live_view_on.get(dev_id) == enabled:
+        return
+    ws = upstream_ws.get(dev_id)
+    if ws is None or ws.closed:
+        return
+    try:
+        # WLED tracks a single live-view client: {"lv": false} clears it and it
+        # stops sending frames entirely.
+        await ws.send_str(json.dumps({"lv": enabled}))
+        live_view_on[dev_id] = enabled
+        log.info("live view %s for %s", "on" if enabled else "off", dev_id)
+    except Exception as e:
+        log.warning("could not toggle live view for %s: %s", dev_id, e)
+
+
+async def _disable_after_grace(dev_id):
+    """Wait before going idle: navigating between dashboards drops and remakes
+    the connection, and that shouldn't stop and restart the device's stream."""
+    try:
+        await asyncio.sleep(IDLE_GRACE_SECONDS)
+        if not subscribers[dev_id]:
+            await set_live_view(dev_id, False)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        idle_tasks.pop(dev_id, None)
+
+
+def cancel_idle_timer(dev_id):
+    task = idle_tasks.pop(dev_id, None)
+    if task:
+        task.cancel()
+
+
 def extract_brightness(payload):
     """Pull master brightness out of a WLED state push. Live-preview pixel data
     arrives already scaled by it, so viewers need it to undo that scaling."""
@@ -533,7 +580,10 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                 log.info("upstream connected: %s (%s)", dev_id, ip)
                 device_status[dev_id]["connected"] = True
                 device_status[dev_id]["last_connected_at"] = time.time()
-                await ws.send_str("{'lv':true}")
+                upstream_ws[dev_id] = ws
+                # Only ask for frames if someone is actually watching; the socket
+                # stays open either way, for state updates like brightness.
+                await set_live_view(dev_id, bool(subscribers[dev_id]), force=True)
                 await sync_effect_list(app, dev_id, ip, input_select_entity)
                 backoff = 1
                 async for msg in ws:
@@ -562,6 +612,8 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                         break
         except Exception as e:
             log.warning("upstream %s (%s) dropped: %s", dev_id, ip, e)
+        upstream_ws.pop(dev_id, None)
+        live_view_on.pop(dev_id, None)
         device_status[dev_id]["connected"] = False
         await asyncio.sleep(backoff)
         backoff = min(backoff * 2, 30)
@@ -573,8 +625,12 @@ async def handle_ws(request):
         raise web.HTTPNotFound()
     ws = web.WebSocketResponse()
     await ws.prepare(request)
+    was_idle = not subscribers[dev_id]
     subscribers[dev_id].add(ws)
     log.info("client subscribed to %s (now %d)", dev_id, len(subscribers[dev_id]))
+    cancel_idle_timer(dev_id)
+    if was_idle:
+        await set_live_view(dev_id, True)
     # Send what we already know, so a card opened between state changes doesn't
     # render un-normalised until the user next touches the brightness slider.
     bri = device_status[dev_id]["bri"]
@@ -589,6 +645,8 @@ async def handle_ws(request):
     finally:
         subscribers[dev_id].discard(ws)
         log.info("client unsubscribed from %s (now %d)", dev_id, len(subscribers[dev_id]))
+        if not subscribers[dev_id] and dev_id not in idle_tasks:
+            idle_tasks[dev_id] = asyncio.create_task(_disable_after_grace(dev_id))
     return ws
 
 

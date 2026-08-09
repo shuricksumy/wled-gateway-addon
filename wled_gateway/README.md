@@ -112,6 +112,19 @@ This needs the add-on's `homeassistant_api: true` permission (already set
 in `config.json`), which gives it a `SUPERVISOR_TOKEN` to call
 `http://supervisor/core/api/...` on Home Assistant's behalf.
 
+## Idle devices
+
+Live view is only requested while something is actually watching: it's switched
+on as the first viewer connects and off shortly after the last one leaves, so a
+device isn't streaming frames over WiFi with no dashboard open. The connection
+to each device stays up regardless, so status and brightness stay current, and
+the short delay before going idle means moving between dashboards doesn't
+interrupt anything.
+
+The [Lovelace card](../lovelace/README.md) does the same at its end — a card
+scrolled out of view or on a hidden tab disconnects, which lets the device go
+idle too.
+
 ## Preview brightness
 
 WLED's live view sends pixels **already scaled by the device's master

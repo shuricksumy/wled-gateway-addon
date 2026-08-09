@@ -252,6 +252,17 @@ card:
 
 ---
 
+## Idle behaviour
+
+A card that isn't being looked at — scrolled out of view, on a hidden tab, or a
+phone in a pocket — disconnects after a few seconds instead of receiving and
+drawing frames nobody sees. It reconnects the moment it's visible again.
+
+That also lets the add-on stop the device streaming entirely once no card is
+watching it, so an idle dashboard costs the strip nothing. The few seconds of
+delay mean scrolling past a card, or flicking between dashboards, doesn't
+interrupt anything.
+
 ## Troubleshooting
 
 - **"Custom element doesn't exist"** — the resource isn't loaded. Check the URL

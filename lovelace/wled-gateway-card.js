@@ -30,7 +30,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.7.0";
+const CARD_VERSION = "1.8.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -205,13 +205,13 @@ class WledGatewayCard extends HTMLElement {
     };
     this._config.device = String(this._config.device);
     this._render();
-    if (this._hass) this._start();
+    if (this._hass) this._updateActive();
   }
 
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
-    if (first && this._config) this._start();
+    if (first && this._config) this._updateActive();
   }
 
   getCardSize() {
@@ -243,11 +243,74 @@ class WledGatewayCard extends HTMLElement {
   }
 
   connectedCallback() {
-    if (this._config && this._hass) this._start();
+    this._watchVisibility();
+    this._updateActive();
   }
 
   disconnectedCallback() {
+    this._unwatchVisibility();
     this._stop();
+  }
+
+  /* ---------------- only stream while being looked at ---------------- */
+
+  // A card scrolled out of view, on another dashboard tab, or on a phone in
+  // someone's pocket was still receiving and drawing every frame. Dropping the
+  // socket also lets the add-on stop the device streaming altogether.
+  _watchVisibility() {
+    if (this._visibilityWatched) return;
+    this._visibilityWatched = true;
+    this._visible = true;
+
+    if (typeof IntersectionObserver !== "undefined") {
+      this._intersectionObserver = new IntersectionObserver(
+        (entries) => {
+          this._visible = entries.some((e) => e.isIntersecting);
+          this._updateActive();
+        },
+        { threshold: 0 }
+      );
+      this._intersectionObserver.observe(this);
+    }
+    this._onVisibilityChange = () => this._updateActive();
+    document.addEventListener("visibilitychange", this._onVisibilityChange);
+  }
+
+  _unwatchVisibility() {
+    this._visibilityWatched = false;
+    if (this._intersectionObserver) {
+      this._intersectionObserver.disconnect();
+      this._intersectionObserver = null;
+    }
+    if (this._onVisibilityChange) {
+      document.removeEventListener("visibilitychange", this._onVisibilityChange);
+      this._onVisibilityChange = null;
+    }
+    if (this._idleTimer) {
+      clearTimeout(this._idleTimer);
+      this._idleTimer = null;
+    }
+  }
+
+  _updateActive() {
+    if (!this._config || !this._hass) return;
+    const active = this.isConnected && this._visible !== false && !document.hidden;
+
+    if (active) {
+      if (this._idleTimer) {
+        clearTimeout(this._idleTimer);
+        this._idleTimer = null;
+      }
+      this._start();
+    } else if (!this._idleTimer && this._started) {
+      // Grace period: scrolling a card past the edge of the screen, or flicking
+      // between dashboards, shouldn't tear the stream down and rebuild it.
+      this._idleTimer = setTimeout(() => {
+        this._idleTimer = null;
+        this._stop();
+        this._status("paused");
+      }, 5000);
+    }
   }
 
   /* ---------------- rendering ---------------- */

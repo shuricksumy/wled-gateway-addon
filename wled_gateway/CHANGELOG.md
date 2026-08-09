@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0
+- Devices no longer stream their live view around the clock. Every configured
+  device was asked for frames on connect and kept sending them forever, whether
+  or not any dashboard was open — constant WiFi traffic and work for each ESP
+  for nothing. Live view is now turned on when the first viewer arrives and off
+  ten seconds after the last one leaves, with the socket kept open throughout
+  for state updates. Moving between dashboards doesn't interrupt the stream.
+
 ## 1.6.3
 - Fix dimmed previews washing out to pale, desaturated colour. The boost
   assumed the live view is always scaled by the device's brightness, but WLED

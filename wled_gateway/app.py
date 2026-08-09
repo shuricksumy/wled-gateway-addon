@@ -30,6 +30,74 @@ SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
 # pick up changes, no rebuild needed.
 
 
+CARD_SOURCE = Path("/app/www/wled-gateway-card.js")
+# Where Home Assistant's config folder shows up depends on the mapping the
+# Supervisor gives us, so look rather than assume — and if it isn't there,
+# carry on without it.
+HA_CONFIG_DIRS = (Path("/homeassistant"), Path("/config"))
+card_status = {"installed": False, "path": None, "detail": "not attempted yet"}
+
+
+def install_lovelace_card():
+    """Copy the bundled card into <config>/www so it updates with the add-on.
+
+    Never raises: a missing mapping or a read-only filesystem should cost the
+    card, not the add-on."""
+    try:
+        if not CARD_SOURCE.exists():
+            card_status["detail"] = "card not bundled in this image"
+            return
+        config_dir = next((d for d in HA_CONFIG_DIRS if d.is_dir()), None)
+        if config_dir is None:
+            card_status["detail"] = "Home Assistant's config folder isn't mapped into the add-on"
+            return
+
+        www = config_dir / "www"
+        www.mkdir(parents=True, exist_ok=True)
+        target = www / CARD_SOURCE.name
+        source_text = CARD_SOURCE.read_text()
+
+        if target.exists() and target.read_text() == source_text:
+            card_status.update(installed=True, path=str(target), detail="already up to date")
+            log.info("lovelace card already current at %s", target)
+            return
+
+        target.write_text(source_text)
+        card_status.update(installed=True, path=str(target), detail="installed")
+        log.info("installed lovelace card to %s", target)
+    except Exception as e:
+        card_status["detail"] = f"could not install: {e}"
+        log.warning("could not install the lovelace card: %s", e)
+
+
+def card_version():
+    try:
+        match = re.search(r'CARD_VERSION\s*=\s*"([^"]+)"', CARD_SOURCE.read_text())
+        return match.group(1) if match else None
+    except Exception:
+        return None
+
+
+async def fetch_own_slug(app):
+    """Ask Supervisor what we're called, so the info page can spell out the slug
+    the card config needs instead of sending people to read a URL."""
+    if not SUPERVISOR_TOKEN:
+        return None
+    try:
+        async with app["session"].get(
+            "http://supervisor/addons/self/info",
+            headers={"Authorization": f"Bearer {SUPERVISOR_TOKEN}"},
+            timeout=5,
+        ) as resp:
+            if resp.status != 200:
+                return None
+            payload = await resp.json()
+            return (payload.get("data") or {}).get("slug")
+    except Exception as e:
+        log.warning("could not ask Supervisor for our own slug: %s", e)
+        return None
+
+
 def slugify(text):
     """Match how Home Assistant turns a helper's name into its entity_id, so the
     id we predict up front is the id HA actually ends up creating."""
@@ -809,9 +877,30 @@ INDEX_HTML = """<!DOCTYPE html>
     <tr><th>Status</th><th>ID</th><th>Name</th><th>IP</th><th>Preview card URL</th><th>Device Web UI</th></tr>
     {rows}
   </table>
+
+  <h2>Lovelace card</h2>
+  {card_section}
 </body>
 </html>
 """
+
+
+CARD_SECTION_UNAVAILABLE = """<p>The custom card isn't installed. {detail}</p>
+<p>You can still use iframe cards with the base path above — see the add-on
+documentation.</p>"""
+
+CARD_SECTION = """<p>A custom card is installed and kept in step with the add-on, so
+previews survive switching between your local and remote URLs — an iframe on an
+Ingress URL can't, and returns 401 until this page is opened by hand.</p>
+<p>Add it once under <b>Settings &rarr; Dashboards &rarr; Resources</b> as a
+<b>JavaScript module</b>:</p>
+<pre id="resource">/local/wled-gateway-card.js?v={card_version}</pre>
+<button onclick="navigator.clipboard.writeText(document.getElementById('resource').textContent)">Copy</button>
+<p>Then paste a card. This add-on's slug is filled in for you:</p>
+<pre id="yaml">{yaml}</pre>
+<button onclick="navigator.clipboard.writeText(document.getElementById('yaml').textContent)">Copy</button>
+<p><small>Installed at <code>{path}</code> ({detail}). After an add-on update,
+bump the <code>?v=</code> on the resource so browsers fetch the new copy.</small></p>"""
 
 
 async def handle_index(request):
@@ -833,14 +922,34 @@ async def handle_index(request):
         )
 
     rows = "".join(row(dev_id, dev) for dev_id, dev in DEVICES.items())
+
+    if card_status["installed"]:
+        slug = request.app.get("slug") or "YOUR_ADDON_SLUG"
+        first = next(iter(DEVICES), "1")
+        yaml_snippet = (
+            "type: custom:wled-gateway-card\n"
+            f"addon: {slug}\n"
+            f'device: "{first}"'
+        )
+        card_section = CARD_SECTION.format(
+            card_version=html.escape(card_version() or "1"),
+            yaml=html.escape(yaml_snippet),
+            path=html.escape(card_status["path"] or ""),
+            detail=html.escape(card_status["detail"]),
+        )
+    else:
+        card_section = CARD_SECTION_UNAVAILABLE.format(detail=html.escape(card_status["detail"]))
+
     return web.Response(
-        text=INDEX_HTML.format(ingress_path=ingress_path, rows=rows),
+        text=INDEX_HTML.format(ingress_path=ingress_path, rows=rows, card_section=card_section),
         content_type="text/html",
     )
 
 
 async def on_startup(app):
     app["session"] = ClientSession()
+    install_lovelace_card()
+    app["slug"] = await fetch_own_slug(app)
     app["upstream_tasks"] = [
         asyncio.create_task(upstream_loop(app, dev_id, dev["ip"], dev.get("input_select")))
         for dev_id, dev in DEVICES.items()

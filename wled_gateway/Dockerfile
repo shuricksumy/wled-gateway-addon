@@ -4,6 +4,9 @@ WORKDIR /app
 # unpinned install would pick it up silently on the next rebuild.
 RUN pip install --no-cache-dir "aiohttp>=3.9,<4"
 COPY app.py .
+# Shipped in the image so the add-on can install it into Home Assistant's www
+# folder, keeping the card in step with the add-on instead of hand-copied.
+COPY www/ ./www/
 EXPOSE 8099
 
 LABEL \

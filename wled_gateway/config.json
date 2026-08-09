@@ -1,11 +1,15 @@
 {
   "name": "WLED Gateway",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "slug": "wled_gateway",
   "description": "Single endpoint for WLED live-preview: holds the one live-view connection each WLED device allows and fans it out to multiple dashboard viewers at once.",
   "url": "https://github.com/shuricksumy/wled-gateway-addon",
   "image": "ghcr.io/shuricksumy/wled-gateway-addon-wled_gateway-{arch}",
-  "arch": ["aarch64", "amd64", "armv7"],
+  "arch": [
+    "aarch64",
+    "amd64",
+    "armv7"
+  ],
   "init": false,
   "ingress": true,
   "ingress_port": 8099,
@@ -13,6 +17,12 @@
   "panel_title": "WLED Gateway",
   "panel_admin": false,
   "homeassistant_api": true,
+  "map": [
+    {
+      "type": "homeassistant_config",
+      "read_only": false
+    }
+  ],
   "watchdog": "http://[HOST]:[PORT:8099]/",
   "stage": "stable",
   "startup": "application",
@@ -20,17 +30,49 @@
   "options": {
     "auto_create_helpers": true,
     "devices": [
-      {"id": "1", "name": "Living Room", "ip": "192.0.2.11", "input_select": "input_select.wled_effect_1"},
-      {"id": "2", "name": "Bedroom", "ip": "192.0.2.12", "input_select": "input_select.wled_effect_2"},
-      {"id": "3", "name": "Matrix", "ip": "192.0.2.13", "input_select": "input_select.wled_effect_matrix"},
-      {"id": "4", "name": "Strip Left", "ip": "192.0.2.14", "input_select": "input_select.wled_effect_left"},
-      {"id": "5", "name": "Strip Right", "ip": "192.0.2.15", "input_select": "input_select.wled_effect_right"}
+      {
+        "id": "1",
+        "name": "Living Room",
+        "ip": "192.0.2.11",
+        "input_select": "input_select.wled_effect_1"
+      },
+      {
+        "id": "2",
+        "name": "Bedroom",
+        "ip": "192.0.2.12",
+        "input_select": "input_select.wled_effect_2"
+      },
+      {
+        "id": "3",
+        "name": "Matrix",
+        "ip": "192.0.2.13",
+        "input_select": "input_select.wled_effect_matrix"
+      },
+      {
+        "id": "4",
+        "name": "Strip Left",
+        "ip": "192.0.2.14",
+        "input_select": "input_select.wled_effect_left"
+      },
+      {
+        "id": "5",
+        "name": "Strip Right",
+        "ip": "192.0.2.15",
+        "input_select": "input_select.wled_effect_right"
+      }
     ]
   },
   "schema": {
     "auto_create_helpers": "bool?",
     "devices": [
-      {"id": "str", "name": "str", "ip": "str", "input_select": "str?", "full_brightness_preview": "bool?", "preview_brightness": "int(0,800)?"}
+      {
+        "id": "str",
+        "name": "str",
+        "ip": "str",
+        "input_select": "str?",
+        "full_brightness_preview": "bool?",
+        "preview_brightness": "int(0,800)?"
+      }
     ]
   }
 }

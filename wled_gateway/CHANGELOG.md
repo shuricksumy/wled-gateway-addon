@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0
+- The Lovelace card now ships with the add-on and is installed into
+  `<config>/www` on startup, so it no longer has to be copied by hand and can't
+  drift out of step with the add-on. If the config folder isn't writable the
+  add-on says so on its page and carries on — nothing else depends on it.
+- The add-on's page now has a **Lovelace card** section with the resource URL
+  to register (versioned, so cache-busting is just copying it again) and a
+  ready-made card with this add-on's slug already filled in — no more reading
+  the slug out of a browser URL.
+
 ## 1.7.0
 - Devices no longer stream their live view around the clock. Every configured
   device was asked for frames on connect and kept sending them forever, whether

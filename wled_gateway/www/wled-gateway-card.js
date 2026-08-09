@@ -14,18 +14,9 @@
  * It also looks up the add-on's Ingress URL, so no token is hardcoded and
  * reinstalling the add-on doesn't break your cards.
  *
- * Install:
- *   1. copy this file to  <config>/www/wled-gateway-card.js
- *   2. Settings -> Dashboards -> Resources -> Add resource
- *        URL:  /local/wled-gateway-card.js
- *        Type: JavaScript module
- *   3. add a card:
- *        type: custom:wled-gateway-card
- *        addon: abcd1234_wled_gateway     # slug, see below
- *        device: "1"
- *
- * The add-on slug is in the URL of its page in Home Assistant:
- *   /hassio/addon/<slug>/info
+ * The add-on installs this into <config>/www itself, so it stays in step with
+ * the add-on. Open the add-on's own page for the resource URL to register and a
+ * ready-made card, with the slug already filled in.
  */
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match

@@ -23,11 +23,13 @@ resized like any other card.
 
 ## Install
 
-1. Copy [`wled-gateway-card.js`](wled-gateway-card.js) to `<config>/www/wled-gateway-card.js`
-2. **Settings → Dashboards → Resources → Add resource**
-   - URL: `/local/wled-gateway-card.js`
-   - Type: **JavaScript module**
-3. Reload the page
+The add-on copies the card into `<config>/www` on startup, so there's no file to
+move by hand and it updates with the add-on. Two steps remain:
+
+1. Open the add-on's **Web UI**. Under *Lovelace card* it shows the resource URL
+   to register and a ready-made card with your slug already filled in.
+2. Add that URL under **Settings → Dashboards → Resources** as a **JavaScript
+   module**, then paste the card.
 
 ```yaml
 type: custom:wled-gateway-card
@@ -35,29 +37,28 @@ addon: 71966d0e_wled_gateway
 device: "1"
 ```
 
-### Finding the add-on slug
-
-It's in the URL of the add-on's page in Home Assistant:
-
-```
-http://homeassistant.local:8123/hassio/addon/71966d0e_wled_gateway/info
-                                             ^^^^^^^^^^^^^^^^^^^^^
-```
-
-The dashed form (`71966d0e-wled-gateway`) is the add-on's *hostname*, and is
-easy to grab by mistake — the card accepts either and tries both.
+The slug is also in the URL of the add-on's page
+(`/hassio/addon/`**`71966d0e_wled_gateway`**`/info`). The dashed form
+(`71966d0e-wled-gateway`) is the add-on's *hostname* and easy to grab by
+mistake — the card accepts either.
 
 ### Updating the card
 
-Browsers cache the file by URL, so replacing it isn't enough. Bump a version
-query on the resource each time:
+An add-on update replaces the file, but browsers cache it by URL, so bump the
+version query on the resource to match:
 
 ```
-/local/wled-gateway-card.js?v=2
+/local/wled-gateway-card.js?v=1.8.0
 ```
 
-The loaded version is logged to the browser console at startup, so you can
-check which copy you actually got.
+The add-on's page shows the current version in that URL, and the card logs the
+version it loaded to the browser console — so a mismatch is visible.
+
+### Installing it by hand
+
+If the add-on can't write to your config folder it says so on its page, and
+[`wled_gateway/www/wled-gateway-card.js`](../wled_gateway/www/wled-gateway-card.js)
+can be copied to `<config>/www/` yourself.
 
 ---
 

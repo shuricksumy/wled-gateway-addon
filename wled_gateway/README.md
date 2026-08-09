@@ -52,7 +52,9 @@ devices:
   created for you on first connect. Set this only to point a device at a
   helper you already have under a different name.
 - `full_brightness_preview` — optional, defaults to `true`. Shows the preview
-  at full strength regardless of how far the device is dimmed. See
+  at full strength regardless of how far the device is dimmed.
+- `preview_brightness` — optional. A fixed percentage that ignores the device's
+  brightness entirely (`100` = colours exactly as received). See
   [below](#preview-brightness).
 - `auto_create_helpers` — optional, defaults to `true`. Set it to `false` to
   stop the add-on creating helpers, in which case only devices with an
@@ -122,24 +124,39 @@ the reported brightness rather than just brightening everything. Untick
 **Preview at full brightness** on a device to see the strip exactly as it
 really looks.
 
+### Or pin it to a constant
+
+If following the device looks uneven, set **Fixed preview brightness %** on the
+device and the preview ignores the device's brightness completely:
+
+| Value | Result |
+|---|---|
+| *(empty)* | Follow the device — scale the preview up as it dims |
+| `100` | Exactly the colours as received, no boost at all |
+| `175` | The boost this preview used before it followed the device |
+| `300`+ | Punchier, for a preview that has to read from across the room |
+
 Per card, the URL wins over the setting:
 
 | Parameter | Effect |
 |---|---|
+| `&bright=100` | Pin to a constant percentage, ignoring the device |
 | `&normalize=0` | True look — preview dims with the device |
-| `&normalize=1` | Full strength, whatever the device setting says |
-| `&gain=1.5` | Extra multiplier on top, if you want the preview to pop |
+| `&normalize=1` | Scale up as the device dims |
+| `&gain=1.5` | Extra multiplier on top of whichever mode is active |
 
 ```yaml
 type: iframe
-url: INGRESS/preview?wled=1&normalize=0   # this card only
+url: INGRESS/preview?wled=1&bright=100   # this card only
 aspect_ratio: 5%
 ```
 
 **Worth knowing**: at very low brightness the device has already crushed the
 colours into a handful of levels before sending them, so scaling back up looks
-grainy and banded. That detail is gone before the add-on ever sees it — the
-boost is capped at 10x for that reason. It's a dashboard preview, not a
+grainy. Pixels at 1–2 counts are dropped rather than amplified — otherwise a
+dimmed strip previews as drifting speckle — and the boost is capped at 8x.
+Scaling is applied per pixel as a whole, so a boosted colour keeps its hue
+instead of shifting as one channel saturates. It's a dashboard preview, not a
 colour-accurate instrument.
 
 ## Finding your Ingress URL
@@ -214,8 +231,8 @@ automatically — no hunting through dashboards.
 
 | Path | What it does |
 |---|---|
-| `/preview?wled=<id>` | Linear preview — a single gradient bar of all LEDs. Good for LED strips. Optional `&rotate=90\|180\|270` to rotate the bar, `&normalize=0\|1` and `&gain=<n>` for [brightness](#preview-brightness). |
-| `/preview2d?wled=<id>` | 2D preview — a dot-matrix canvas, for matrix/panel devices. Takes the same `&normalize` / `&gain` as above. |
+| `/preview?wled=<id>` | Linear preview — a single gradient bar of all LEDs. Good for LED strips. Optional `&rotate=90\|180\|270` to rotate the bar, `&bright=<pct>`, `&normalize=0\|1` and `&gain=<n>` for [brightness](#preview-brightness). |
+| `/preview2d?wled=<id>` | 2D preview — a dot-matrix canvas, for matrix/panel devices. Takes the same `&bright` / `&normalize` / `&gain` as above. |
 | `/ws/<id>` | Raw relay WebSocket, if you're building your own frontend instead of using the built-in pages. |
 | `/json/<id>/live` | Passthrough to the device's own `/json/live` HTTP endpoint. |
 | `/devices` | JSON list of configured devices and live connection status, for debugging. |

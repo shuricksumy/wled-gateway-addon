@@ -62,6 +62,8 @@ def load_devices():
             "ip": dev["ip"],
             "input_select": configured or (default_input_select(dev_id) if AUTO_CREATE_HELPERS else None),
             "full_brightness_preview": bool(dev.get("full_brightness_preview", True)),
+            # 0 / unset means "follow the device"; anything else is a constant.
+            "preview_brightness": int(dev.get("preview_brightness") or 0),
         }
     return devices
 
@@ -98,22 +100,47 @@ PREVIEW_HTML = """<!DOCTYPE html>
     var normalizeParam = getUrlParameter('normalize');
     var normalize = normalizeParam === null ? normalizeDefault : normalizeParam !== '0';
     var gain = parseFloat(getUrlParameter('gain', '1')) || 1;
-    var briFactor = 1;
-    var MAX_BOOST = 10;  // below ~10% the data is already quantised; boosting
-                         // further just amplifies banding
 
-    function applyBrightness() {
-      const factor = Math.min(MAX_BOOST, Math.max(1, briFactor)) * gain;
-      document.getElementById("canv").style.filter =
-        factor === 1 ? '' : `brightness(${Math.round(factor * 100)}%)`;
+    // A fixed percentage (from the device's setting, or ?bright= on the card)
+    // ignores the device brightness altogether: 100 = exactly as received,
+    // 175 = the boost this preview always used, 0 = follow the device.
+    var fixedPercent = parseFloat(getUrlParameter('bright', '__FIXED_PERCENT__')) || 0;
+
+    var BASE_GAIN = 1.75;   // the preview has always been shown boosted; without
+                            // this it reads as flat at full brightness
+    var MAX_FACTOR = 8;     // past this, dim frames are mostly amplified noise
+    var NOISE_FLOOR = 2;    // 1-2 counts on a dimmed strip are quantisation
+                            // remnants, not light — scaling them makes "snow"
+    var deviceBri = 255;
+    var factor = BASE_GAIN * gain;
+
+    function recomputeFactor() {
+      if (fixedPercent > 0) {
+        factor = Math.min(MAX_FACTOR, (fixedPercent / 100) * gain);
+        return;
+      }
+      const norm = normalize ? 255 / Math.max(deviceBri, 1) : 1;
+      factor = Math.min(MAX_FACTOR, BASE_GAIN * gain * norm);
+    }
+    recomputeFactor();
+
+    // Scale the pixel as a whole rather than each channel independently: if a
+    // channel would clip, back the whole pixel off instead, so boosting can't
+    // shift hue (a boosted orange turning yellow as red saturates first).
+    function scalePixel(r, g, b) {
+      if (factor === 1) return [r, g, b];
+      const mx = Math.max(r, g, b);
+      if (mx <= NOISE_FLOOR) return [0, 0, 0];
+      const f = mx * factor > 255 ? 255 / mx : factor;
+      return [Math.round(r * f), Math.round(g * f), Math.round(b * f)];
     }
 
     function onStateMessage(raw) {
       try {
         const msg = JSON.parse(raw);
         if (typeof msg.bri === 'number') {
-          briFactor = normalize ? 255 / Math.max(msg.bri, 1) : 1;
-          applyBrightness();
+          deviceBri = msg.bri;
+          recomputeFactor();
         }
       } catch (err) { /* not a state message we care about */ }
     }
@@ -154,7 +181,6 @@ PREVIEW_HTML = """<!DOCTYPE html>
 
     function start() {
       applyRotation();
-      applyBrightness();
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${proto}//${window.location.host}${wsPrefix()}/ws/${wledId}`);
       ws.binaryType = "arraybuffer";
@@ -168,7 +194,8 @@ PREVIEW_HTML = """<!DOCTYPE html>
           let grad = "linear-gradient(90deg,";
           const offset = (bytes[1] === 2) ? 4 : 2;
           for (let i = offset; i < bytes.length; i += 3) {
-            grad += `rgb(${bytes[i]},${bytes[i + 1]},${bytes[i + 2]})`;
+            const [r, g, b] = scalePixel(bytes[i], bytes[i + 1], bytes[i + 2]);
+            grad += `rgb(${r},${g},${b})`;
             if (i < bytes.length - 3) grad += ",";
           }
           grad += ")";
@@ -218,24 +245,42 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
     var normalizeParam = getUrlParameter('normalize');
     var normalize = normalizeParam === null ? normalizeDefault : normalizeParam !== '0';
     var gain = parseFloat(getUrlParameter('gain', '1')) || 1;
-    var briFactor = 1;
-    var MAX_BOOST = 10;
+    var fixedPercent = parseFloat(getUrlParameter('bright', '__FIXED_PERCENT__')) || 0;
 
-    function applyBrightness() {
-      const factor = Math.min(MAX_BOOST, Math.max(1, briFactor)) * gain;
-      c.style.filter = factor === 1 ? '' : `brightness(${Math.round(factor * 100)}%)`;
+    var BASE_GAIN = 1.75;
+    var MAX_FACTOR = 8;
+    var NOISE_FLOOR = 2;
+    var deviceBri = 255;
+    var factor = BASE_GAIN * gain;
+
+    function recomputeFactor() {
+      if (fixedPercent > 0) {
+        factor = Math.min(MAX_FACTOR, (fixedPercent / 100) * gain);
+        return;
+      }
+      const norm = normalize ? 255 / Math.max(deviceBri, 1) : 1;
+      factor = Math.min(MAX_FACTOR, BASE_GAIN * gain * norm);
+    }
+    recomputeFactor();
+
+    // Whole-pixel scaling with a noise floor — see the 1D preview for why.
+    function scalePixel(r, g, b) {
+      if (factor === 1) return [r, g, b];
+      const mx = Math.max(r, g, b);
+      if (mx <= NOISE_FLOOR) return [0, 0, 0];
+      const f = mx * factor > 255 ? 255 / mx : factor;
+      return [Math.round(r * f), Math.round(g * f), Math.round(b * f)];
     }
 
     function onStateMessage(raw) {
       try {
         const msg = JSON.parse(raw);
         if (typeof msg.bri === 'number') {
-          briFactor = normalize ? 255 / Math.max(msg.bri, 1) : 1;
-          applyBrightness();
+          deviceBri = msg.bri;
+          recomputeFactor();
         }
       } catch (err) { /* not a state message we care about */ }
     }
-    applyBrightness();
 
     function setCanvas() {
       c.width = 0.98 * window.innerWidth;
@@ -272,7 +317,8 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
           let i = 4;
           for (let y = 0.5; y < rows; y++) {
             for (let x = 0.5; x < cols; x++) {
-              ctx.fillStyle = `rgb(${bytes[i]},${bytes[i + 1]},${bytes[i + 2]})`;
+              const [pr, pg, pb] = scalePixel(bytes[i], bytes[i + 1], bytes[i + 2]);
+              ctx.fillStyle = `rgb(${pr},${pg},${pb})`;
               ctx.beginPath();
               ctx.arc(x * scale + xOffset, y * scale, 0.4 * scale, 0, 2 * Math.PI);
               ctx.fill();
@@ -495,8 +541,12 @@ def render_preview(template, dev_id):
     """Bake this device's brightness setting into the page as the default. Plain
     substitution rather than str.format, since the page is full of CSS and JS
     braces that format() would choke on."""
-    default = "true" if DEVICES[dev_id]["full_brightness_preview"] else "false"
-    return template.replace("__NORMALIZE_DEFAULT__", default)
+    dev = DEVICES[dev_id]
+    return (
+        template
+        .replace("__NORMALIZE_DEFAULT__", "true" if dev["full_brightness_preview"] else "false")
+        .replace("__FIXED_PERCENT__", str(dev["preview_brightness"]))
+    )
 
 
 async def handle_preview(request):

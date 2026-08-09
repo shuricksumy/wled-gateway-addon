@@ -34,6 +34,14 @@ configuration:
           Turn it off for this device to see the preview exactly as the strip
           looks. Very low brightness will still look grainy, since the detail
           is already lost before it reaches the add-on.
+      preview_brightness:
+        name: Fixed preview brightness % (optional)
+        description: >-
+          Leave empty to follow the device (the setting above). Set a number to
+          pin the preview to a constant instead, ignoring the device's
+          brightness entirely: 100 shows the colours exactly as received, 175 is
+          the boost this preview has always used, higher is punchier. Use this
+          if following the device looks uneven to you.
       input_select:
         name: Effect dropdown (optional)
         description: >-

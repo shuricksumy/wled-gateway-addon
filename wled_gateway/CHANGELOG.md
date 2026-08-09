@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.1
+- Fix the preview looking flat at high brightness. 1.6.0 dropped the 175%
+  boost the preview had always applied, so at full brightness — where
+  normalising multiplies by 1 — it rendered noticeably duller than before.
+  That boost is back as the baseline.
+- Fix "snow": a dimmed strip previewed as drifting speckle. Normalising with a
+  CSS filter scaled every pixel, so 1-2 count quantisation remnants got
+  amplified into visible dots. Scaling now happens per pixel with a noise
+  floor, so near-black stays black.
+- Scale each pixel as a whole rather than per channel, so boosting can't shift
+  hue when one channel saturates before the others.
+- New per-device **Fixed preview brightness %** (and `&bright=<pct>` per card)
+  to pin the preview to a constant and ignore the device's brightness
+  altogether — `100` shows the colours exactly as received.
+- Boost cap lowered from 10x to 8x, past which dim frames were mostly
+  amplified noise.
+
 ## 1.6.0
 - Previews no longer dim along with the device. WLED sends the live view
   already scaled by master brightness, so a strip at 20% previewed at 20% —

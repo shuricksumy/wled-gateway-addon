@@ -30,7 +30,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.3.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -169,6 +169,13 @@ class WledGatewayCard extends HTMLElement {
     this._config = {
       device: "1",
       view: "auto", // auto | strip | matrix
+      // 0 / 90 / 180 / 270, turning the preview clockwise:
+      //   strip    0 runs left to right, 90 top to bottom, 180 right to left,
+      //            270 bottom to top
+      //   matrix   turns the panel, swapping its width and height at 90/270
+      // Applied while drawing rather than as a CSS transform, so a vertical
+      // strip lays out as a genuinely tall card instead of a wide one tipped
+      // on its side and overflowing.
       rotate: 0,
       // Sizing, in order of precedence:
       //   height       explicit css length, e.g. "60px"
@@ -203,13 +210,24 @@ class WledGatewayCard extends HTMLElement {
   // Sections dashboards size by grid rows rather than content. Without this a
   // strip gets a default-height cell and the preview floats in empty space.
   // Anything set under grid_options in the card config still wins.
+  // Normalised to 0/90/180/270; anything else is treated as no rotation.
+  _rotation() {
+    const raw = ((parseInt(this._config.rotate, 10) || 0) % 360 + 360) % 360;
+    return raw === 90 || raw === 180 || raw === 270 ? raw : 0;
+  }
+
   getGridOptions() {
-    const matrix = this._config && this._config.view === "matrix";
+    const cfg = this._config || {};
+    const matrix = cfg.view === "matrix";
+    const rot = this._rotation();
+    const vertical = matrix ? false : rot === 90 || rot === 270;
     return {
-      rows: matrix ? 4 : 1,
+      // A vertical strip is useless one row tall, so it asks for height and a
+      // narrow default width instead.
+      rows: matrix ? 4 : vertical ? 6 : 1,
       min_rows: 1,
-      columns: 12,
-      min_columns: 3,
+      columns: vertical ? 3 : 12,
+      min_columns: vertical ? 1 : 3,
     };
   }
 
@@ -279,11 +297,8 @@ class WledGatewayCard extends HTMLElement {
     `;
     this._canvas = this.shadowRoot.querySelector("canvas");
     this._msg = this.shadowRoot.querySelector(".msg");
-
-    if (cfg.rotate) {
-      this._canvas.style.transform = `rotate(${cfg.rotate}deg)`;
-      this._canvas.style.transformOrigin = "center center";
-    }
+    // No CSS transform for `rotate` — it's applied while drawing, so the canvas
+    // keeps the card's own shape instead of being turned inside it.
   }
 
   _status(text) {
@@ -467,13 +482,19 @@ class WledGatewayCard extends HTMLElement {
     const count = Math.floor((bytes.length - offset) / 3);
     if (count <= 0) return;
 
-    const width = this._cssW / count;
+    const rot = this._rotation();
+    const vertical = rot === 90 || rot === 270;
+    const backwards = rot === 180 || rot === 270;
+    const span = (vertical ? this._cssH : this._cssW) / count;
+
     for (let i = 0; i < count; i++) {
       const p = offset + i * 3;
       const [r, g, b] = this._scale(bytes[p], bytes[p + 1], bytes[p + 2]);
       ctx.fillStyle = `rgb(${r},${g},${b})`;
-      // Overlap by a pixel: fractional widths otherwise leave hairline gaps.
-      ctx.fillRect(i * width, 0, width + 1, this._cssH);
+      const slot = backwards ? count - 1 - i : i;
+      // Overlap by a pixel: fractional sizes otherwise leave hairline gaps.
+      if (vertical) ctx.fillRect(0, slot * span, this._cssW, span + 1);
+      else ctx.fillRect(slot * span, 0, span + 1, this._cssH);
     }
   }
 
@@ -487,19 +508,46 @@ class WledGatewayCard extends HTMLElement {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, this._cssW, this._cssH);
 
-    const scale = Math.min(this._cssW / cols, this._cssH / rows);
-    const xOffset = Math.floor((this._cssW - scale * cols) / 2);
-    const yOffset = Math.floor((this._cssH - scale * rows) / 2);
+    // At 90/270 the panel is drawn on its side, so the grid it has to fit into
+    // swaps width and height.
+    const rot = this._rotation();
+    const turned = rot === 90 || rot === 270;
+    const gridCols = turned ? rows : cols;
+    const gridRows = turned ? cols : rows;
+
+    const scale = Math.min(this._cssW / gridCols, this._cssH / gridRows);
+    const xOffset = Math.floor((this._cssW - scale * gridCols) / 2);
+    const yOffset = Math.floor((this._cssH - scale * gridRows) / 2);
 
     let i = 4;
-    for (let y = 0.5; y < rows; y++) {
-      for (let x = 0.5; x < cols; x++) {
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
         const [r, g, b] = this._scale(bytes[i], bytes[i + 1], bytes[i + 2]);
+        i += 3;
+
+        let gx = col;
+        let gy = row;
+        if (rot === 90) {
+          gx = rows - 1 - row;
+          gy = col;
+        } else if (rot === 180) {
+          gx = cols - 1 - col;
+          gy = rows - 1 - row;
+        } else if (rot === 270) {
+          gx = row;
+          gy = cols - 1 - col;
+        }
+
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.beginPath();
-        ctx.arc(x * scale + xOffset, y * scale + yOffset, 0.4 * scale, 0, 2 * Math.PI);
+        ctx.arc(
+          (gx + 0.5) * scale + xOffset,
+          (gy + 0.5) * scale + yOffset,
+          0.4 * scale,
+          0,
+          2 * Math.PI
+        );
         ctx.fill();
-        i += 3;
       }
     }
   }

@@ -21,7 +21,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.12.0";
+const CARD_VERSION = "1.12.1";
 const CARD_TAG_CONFIG = "custom:wled-gateway-card";
 
 /* ------------------------------------------------------------------ *
@@ -897,10 +897,15 @@ class WledGatewayCardEditor extends HTMLElement {
     super();
     this._config = {};
     this._devices = {};
+    // Home Assistant can set hass before setConfig. Until the card's real
+    // config has arrived, anything emitted here would overwrite it — which
+    // silently reset cards to a bare { type, addon }.
+    this._hasConfig = false;
   }
 
   setConfig(config) {
     this._config = config || {};
+    this._hasConfig = true;
     this._autofillAddon();
     this._loadDevices();
     this._render();
@@ -908,6 +913,7 @@ class WledGatewayCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    if (!this._hasConfig) return;
     this._autofillAddon();
     this._loadDevices();
     this._render();
@@ -917,7 +923,8 @@ class WledGatewayCardEditor extends HTMLElement {
   // one pasted as YAML — or written before this existed — doesn't. Fill it in
   // rather than making someone go and find the slug.
   _autofillAddon() {
-    if (!this._hass || this._config.addon || this._config.ingress_path || this._autofilling) return;
+    if (!this._hasConfig || !this._hass) return;
+    if (this._config.addon || this._config.ingress_path || this._autofilling) return;
     this._autofilling = true;
     findAddonSlug(this._hass)
       .then((slug) => {
@@ -1059,7 +1066,7 @@ class WledGatewayCardEditor extends HTMLElement {
   }
 
   _render() {
-    if (!this._hass) return;
+    if (!this._hass || !this._hasConfig) return;
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (entry) => LABELS[entry.name] || entry.name;
@@ -1072,6 +1079,8 @@ class WledGatewayCardEditor extends HTMLElement {
   }
 
   _valueChanged(ev) {
+    // Ignore anything the form emits before the card's config has arrived.
+    if (!this._hasConfig) return;
     const value = { ...ev.detail.value };
     // ha-form hands back every key it rendered; dropping the empty ones keeps
     // the YAML as short as what someone would have written by hand.

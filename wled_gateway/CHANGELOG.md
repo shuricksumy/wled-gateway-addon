@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.1
+- Fix cards losing their settings when the editor was opened — on a copy to
+  another dashboard, or simply opening the same card a second time. Home
+  Assistant can hand the editor its `hass` object before the card's config, and
+  the editor was filling in the add-on against the empty config it starts with,
+  emitting that as the card's new configuration. Everything else was already
+  gone by the time the form appeared. The editor now does nothing at all until
+  the real config arrives.
+
 ## 1.13.0
 - Each device now has a `binary_sensor` showing whether it's reachable, named
   after the device — `binary_sensor.wled_gateway_sasha` — with viewers, frame

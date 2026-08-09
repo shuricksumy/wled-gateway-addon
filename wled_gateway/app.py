@@ -108,7 +108,11 @@ PREVIEW_HTML = """<!DOCTYPE html>
 
     var BASE_GAIN = 1.75;   // the preview has always been shown boosted; without
                             // this it reads as flat at full brightness
-    var MAX_FACTOR = 8;     // past this, dim frames are mostly amplified noise
+    var MAX_FACTOR = 24;    // high enough to actually finish normalising a
+                            // heavily dimmed strip — capping lower leaves the
+                            // preview dim, which reads as washed-out and
+                            // low-contrast. The noise floor, not the cap, is
+                            // what keeps quantisation speckle out.
     var NOISE_FLOOR = 2;    // 1-2 counts on a dimmed strip are quantisation
                             // remnants, not light — scaling them makes "snow"
     var deviceBri = 255;
@@ -248,7 +252,7 @@ PREVIEW2D_HTML = """<!DOCTYPE html>
     var fixedPercent = parseFloat(getUrlParameter('bright', '__FIXED_PERCENT__')) || 0;
 
     var BASE_GAIN = 1.75;
-    var MAX_FACTOR = 8;
+    var MAX_FACTOR = 24;   // see the 1D preview
     var NOISE_FLOOR = 2;
     var deviceBri = 255;
     var factor = BASE_GAIN * gain;

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.2
+- Fix dimmed previews looking washed out, with the dark areas lifted and the
+  whole image low-contrast. The boost was capped at 8x, but a strip at 10%
+  needs about 18x to be scaled back to full — so the preview stayed dim, and a
+  dim image reads as flat. The cap is now high enough to finish the job: a
+  dimmed strip renders essentially identically to the same scene at full
+  brightness. Speckle is still held off by the noise floor, which is what
+  actually controls it.
+
 ## 1.6.1
 - Fix the preview looking flat at high brightness. 1.6.0 dropped the 175%
   boost the preview had always applied, so at full brightness — where

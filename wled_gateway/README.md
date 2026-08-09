@@ -154,10 +154,9 @@ aspect_ratio: 5%
 **Worth knowing**: at very low brightness the device has already crushed the
 colours into a handful of levels before sending them, so scaling back up looks
 grainy. Pixels at 1–2 counts are dropped rather than amplified — otherwise a
-dimmed strip previews as drifting speckle — and the boost is capped at 8x.
-Scaling is applied per pixel as a whole, so a boosted colour keeps its hue
-instead of shifting as one channel saturates. It's a dashboard preview, not a
-colour-accurate instrument.
+dimmed strip previews as drifting speckle. Scaling is applied per pixel as a
+whole, so a boosted colour keeps its hue instead of shifting as one channel
+saturates. It's a dashboard preview, not a colour-accurate instrument.
 
 ## Finding your Ingress URL
 

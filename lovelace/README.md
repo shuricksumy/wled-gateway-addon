@@ -70,7 +70,7 @@ check which copy you actually got.
 | `device` | `"1"` | Which device, matching the `id` in the add-on's configuration. |
 | `view` | `auto` | `auto` picks per frame, `strip` forces the bar, `matrix` forces the dot grid. |
 | `rotate` | `0` | `0`, `90`, `180`, `270`. See [Rotation](#rotation). |
-| `fill` | `true` | Fill the card. Set `false` for a compact fixed height. |
+| `fill` | `true` | Fill the card. Combine with `height`/`aspect_ratio` to use those as a *preferred* size that still can't overflow the card. Set `false` for a plain fixed height. |
 | `height` | — | Explicit CSS height, e.g. `40px`. Wins over `aspect_ratio` and `fill`. |
 | `width` | — | Narrows the preview inside the card, e.g. `10px` for a thin vertical strip. The card keeps its grid size; only the drawing is constrained. |
 | `align` | `center` | `center`, `left` or `right`, when `width` is narrower than the card. |
@@ -110,7 +110,10 @@ columns for a vertical one, 4 rows for a matrix. Anything you set under
 `grid_options` in the card config overrides that.
 
 For a fixed shape instead, use `aspect_ratio` (scales with width) or `height`
-(absolute).
+(absolute). With `fill` left on, those act as a preferred size that's capped at
+the card, so a card smaller than the height you asked for shrinks the preview
+rather than clipping it — which on a rotated strip would otherwise hide the lit
+end and look like a dead card.
 
 ---
 

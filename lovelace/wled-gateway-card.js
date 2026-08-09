@@ -30,7 +30,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.4.0";
+const CARD_VERSION = "1.5.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -263,20 +263,26 @@ class WledGatewayCard extends HTMLElement {
     const cfg = this._config;
     const ratio = cfg.aspect_ratio ? this._aspectRatioCss(cfg.aspect_ratio) : null;
 
-    // Fill mode has to be carried all the way down from the host, or the card
-    // keeps its content height and leaves the rest of the grid cell empty.
-    let sizing;
-    if (cfg.height) {
-      sizing = `.wrap { height: ${cfg.height}; }`;
-    } else if (ratio) {
-      sizing = `.wrap { aspect-ratio: ${ratio}; width: 100%; }`;
-    } else if (cfg.fill) {
-      sizing = `
+    // Fill has to be carried all the way down from the host, or the card keeps
+    // its content height and leaves the rest of the grid cell empty.
+    //
+    // height/aspect_ratio are layered ON TOP of fill rather than replacing it:
+    // used alone they'd overflow a smaller grid cell and simply be clipped —
+    // which on a rotated strip hides the lit end and looks like a dead card.
+    // With fill still applied they cap at the cell instead.
+    let sizing = "";
+    if (cfg.fill) {
+      sizing += `
         :host { display: block; height: 100%; }
         ha-card { height: 100%; display: flex; flex-direction: column; }
         .wrap { flex: 1 1 auto; min-height: 24px; }`;
-    } else {
-      sizing = `.wrap { height: ${cfg.view === "matrix" ? "180px" : "40px"}; }`;
+    }
+    if (cfg.height) {
+      sizing += `\n.wrap { flex: 0 1 auto; height: ${cfg.height};${cfg.fill ? " max-height: 100%;" : ""} }`;
+    } else if (ratio) {
+      sizing += `\n.wrap { flex: 0 1 auto; aspect-ratio: ${ratio}; width: 100%;${cfg.fill ? " max-height: 100%;" : ""} }`;
+    } else if (!cfg.fill) {
+      sizing += `\n.wrap { height: ${cfg.view === "matrix" ? "180px" : "40px"}; }`;
     }
 
     if (cfg.width) {
@@ -289,8 +295,11 @@ class WledGatewayCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         ha-card { overflow: hidden; }
-        .wrap { position: relative; background: #000; }
-        canvas { display: block; width: 100%; height: 100%; }
+        .wrap { position: relative; background: #000; overflow: hidden; }
+        /* Absolute, so the canvas can never contribute to layout. Sized from
+           its own box it would feed back through devicePixelRatio — each pass
+           measuring the size it just grew to — and run away down the page. */
+        canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
         ${sizing}
         .msg {
           position: absolute; inset: 0; display: flex;
@@ -308,9 +317,20 @@ class WledGatewayCard extends HTMLElement {
       </ha-card>
     `;
     this._canvas = this.shadowRoot.querySelector("canvas");
+    this._wrap = this.shadowRoot.querySelector(".wrap");
     this._msg = this.shadowRoot.querySelector(".msg");
     // No CSS transform for `rotate` — it's applied while drawing, so the canvas
     // keeps the card's own shape instead of being turned inside it.
+
+    // Repaint the last frame when the card is resized, so dragging it in the
+    // editor tracks live instead of waiting for the device's next frame.
+    if (this._resizeObserver) this._resizeObserver.disconnect();
+    if (typeof ResizeObserver !== "undefined") {
+      this._resizeObserver = new ResizeObserver(() => {
+        if (this._lastFrame) this._paint(this._lastFrame);
+      });
+      this._resizeObserver.observe(this._wrap);
+    }
   }
 
   _status(text) {
@@ -449,9 +469,7 @@ class WledGatewayCard extends HTMLElement {
     const bytes = new Uint8Array(event.data);
     if (bytes[0] !== 76) return; // 'L' — WLED live-view frame
 
-    const is2d = bytes[1] === 2;
-    const offset = is2d ? 4 : 2;
-
+    const offset = bytes[1] === 2 ? 4 : 2;
     let frameMax = 0;
     for (let i = offset; i < bytes.length; i++) {
       if (bytes[i] > frameMax) frameMax = bytes[i];
@@ -459,6 +477,13 @@ class WledGatewayCard extends HTMLElement {
     this._notePeak(frameMax);
     this._recomputeFactor();
 
+    this._lastFrame = bytes;
+    this._paint(bytes);
+  }
+
+  _paint(bytes) {
+    const is2d = bytes[1] === 2;
+    const offset = is2d ? 4 : 2;
     const wantMatrix =
       this._config.view === "matrix" || (this._config.view === "auto" && is2d);
     if (wantMatrix && is2d) this._drawMatrix(bytes);
@@ -469,7 +494,9 @@ class WledGatewayCard extends HTMLElement {
   // look soft on phones and hi-dpi screens. Drawing stays in CSS pixels.
   _sizeCanvas() {
     const c = this._canvas;
-    const rect = c.getBoundingClientRect();
+    // Measure the wrapper, never the canvas: the canvas' size is a consequence
+    // of this measurement, so reading it back would be circular.
+    const rect = (this._wrap || c).getBoundingClientRect();
     const cssW = Math.max(1, Math.round(rect.width));
     const cssH = Math.max(1, Math.round(rect.height));
     const dpr = Math.min(window.devicePixelRatio || 1, 3);

@@ -70,7 +70,7 @@ what each one does.
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `addon` | — | Add-on slug. Required, unless you set `ingress_path`. |
+| `addon` | — | Add-on slug. The editor fills this in for you; only needed by hand if you're writing YAML without it. |
 | `ingress_path` | — | Use a fixed `/api/hassio_ingress/<token>` instead of looking it up. Only for testing — it breaks when the add-on is reinstalled. |
 | `device` | `"1"` | Which device, matching the `id` in the add-on's configuration. |
 | `view` | `auto` | `auto` picks per frame, `strip` forces the bar, `matrix` forces the dot grid, `ring` bends the strip into a circle. |

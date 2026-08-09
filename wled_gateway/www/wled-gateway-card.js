@@ -21,7 +21,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.9.0";
+const CARD_VERSION = "1.9.1";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -792,14 +792,50 @@ class WledGatewayCardEditor extends HTMLElement {
 
   setConfig(config) {
     this._config = config || {};
+    this._autofillAddon();
     this._loadDevices();
     this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
+    this._autofillAddon();
     this._loadDevices();
     this._render();
+  }
+
+  // Cards added from the picker arrive with the add-on already filled in, but
+  // one pasted as YAML — or written before this existed — doesn't. Fill it in
+  // rather than making someone go and find the slug.
+  _autofillAddon() {
+    if (!this._hass || this._config.addon || this._config.ingress_path || this._autofilling) return;
+    this._autofilling = true;
+    findAddonSlug(this._hass)
+      .then((slug) => {
+        // Only if it's still empty: they may have typed one meanwhile.
+        if (!this._config.addon && !this._config.ingress_path) {
+          this._emit({ ...this._config, addon: slug });
+        }
+      })
+      .catch(() => {
+        /* leave it empty; the card explains what's missing */
+      })
+      .finally(() => {
+        this._autofilling = false;
+      });
+  }
+
+  _emit(config) {
+    this._config = config;
+    this._loadDevices();
+    this._render();
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config },
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   _loadDevices() {
@@ -916,13 +952,7 @@ class WledGatewayCardEditor extends HTMLElement {
     for (const [key, val] of Object.entries(value)) {
       if (val === "" || val === undefined || val === null) delete value[key];
     }
-    this.dispatchEvent(
-      new CustomEvent("config-changed", {
-        detail: { config: value },
-        bubbles: true,
-        composed: true,
-      })
-    );
+    this._emit(value);
   }
 }
 

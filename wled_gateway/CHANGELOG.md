@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.1
+- The editor fills in the add-on for any card that doesn't name one, not just
+  cards added from the picker — so a card pasted as YAML, or written before the
+  editor existed, no longer needs the slug looked up by hand. Configs that
+  already name an add-on, or use `ingress_path`, are left alone.
+
 ## 1.10.0
 - The card now has a visual editor, so it can be configured from the UI like
   any built-in card instead of only in YAML — with the shape, layout, ring and

@@ -28,7 +28,9 @@
  *   /hassio/addon/<slug>/info
  */
 
-const CARD_VERSION = "1.0.0";
+// Bump on every change, and bump the ?v= on the Lovelace resource URL to match
+// — the browser caches the file by URL, so without that you keep the old one.
+const CARD_VERSION = "1.1.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of

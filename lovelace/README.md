@@ -72,6 +72,8 @@ check which copy you actually got.
 | `rotate` | `0` | `0`, `90`, `180`, `270`. See [Rotation](#rotation). |
 | `fill` | `true` | Fill the card. Set `false` for a compact fixed height. |
 | `height` | — | Explicit CSS height, e.g. `40px`. Wins over `aspect_ratio` and `fill`. |
+| `width` | — | Narrows the preview inside the card, e.g. `10px` for a thin vertical strip. The card keeps its grid size; only the drawing is constrained. |
+| `align` | `center` | `center`, `left` or `right`, when `width` is narrower than the card. |
 | `aspect_ratio` | — | `16:9`, `2/1`, or a percentage like `5%` (height as a share of width, as the built-in iframe card uses). |
 | `title` | — | Card header. Omit for no header. |
 | `normalize` | `true` | Scale the preview up as the device dims. See [Brightness](#brightness). |
@@ -149,6 +151,9 @@ type: custom:wled-gateway-card
 addon: 71966d0e_wled_gateway
 device: "5"
 rotate: 270      # first LED at the bottom
+height: 400px
+width: 10px      # a thin bar rather than the full card width
+align: center
 ```
 
 ### Matrix

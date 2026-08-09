@@ -30,7 +30,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.3.0";
+const CARD_VERSION = "1.4.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -184,6 +184,11 @@ class WledGatewayCard extends HTMLElement {
       //   fill         otherwise stretch to whatever height the card is given,
       //                which is what you want in a sections dashboard
       height: null,
+      // Narrows the preview within the card — mainly for vertical strips, which
+      // otherwise stretch across the full width. The card itself keeps its grid
+      // size; this only constrains what's drawn.
+      width: null,
+      align: "center", // center | left | right, when width is narrower than the card
       aspect_ratio: null,
       fill: true,
       normalize: true,
@@ -272,6 +277,13 @@ class WledGatewayCard extends HTMLElement {
         .wrap { flex: 1 1 auto; min-height: 24px; }`;
     } else {
       sizing = `.wrap { height: ${cfg.view === "matrix" ? "180px" : "40px"}; }`;
+    }
+
+    if (cfg.width) {
+      // Comes last so it overrides the width any of the modes above set.
+      const margin =
+        cfg.align === "left" ? "0 auto 0 0" : cfg.align === "right" ? "0 0 0 auto" : "0 auto";
+      sizing += `\n.wrap { width: ${cfg.width}; max-width: 100%; margin: ${margin}; }`;
     }
 
     this.shadowRoot.innerHTML = `

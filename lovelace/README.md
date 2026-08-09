@@ -194,17 +194,23 @@ view: matrix
 
 ### Ring
 
-For a circular device — the strip is bent round into a circle, in order.
+For a circular device — the strip is bent round into a circle, in order, so the
+join between the last LED and the first is visible.
 
 ```yaml
 type: custom:wled-gateway-card
 addon: 71966d0e_wled_gateway
 device: "6"
 view: ring
-rotate: 0            # any angle: where LED 0 sits, 0 = top
-ring_thickness: 0.35 # 0.1 a fine hoop, 1 a full disc
-# reverse: true      # if the ring runs the other way round
+rotate: 0
+ring_thickness: 0.1
+reverse: false
 ```
+
+`ring_thickness: 0.1` gives a fine hoop of separate LEDs; raise it towards `1`
+for a chunky band or a full disc. Set `rotate` to whatever angle puts LED 0
+where it physically sits on your ring, and `reverse: true` if it runs
+anticlockwise.
 
 `view: ring` has to be asked for — nothing in the data says a strip is bent
 into a circle.

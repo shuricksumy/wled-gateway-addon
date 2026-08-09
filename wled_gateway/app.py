@@ -143,9 +143,34 @@ def load_devices():
 DEVICES = load_devices()
 subscribers = {dev_id: set() for dev_id in DEVICES}
 device_status = {
-    dev_id: {"connected": False, "last_connected_at": None, "bri": None, "frame_peak": None}
+    dev_id: {
+        "connected": False,
+        "last_connected_at": None,
+        "bri": None,
+        "frame_peak": None,
+        # Diagnostics: "the preview looks wrong" is much easier to act on with
+        # the frame rate and viewer count visible.
+        "fps": 0.0,
+        "frames": 0,
+        "frames_since": None,
+    }
     for dev_id in DEVICES
 }
+FPS_WINDOW_SECONDS = 5
+
+
+async def measure_frame_rates():
+    """Turn the running frame counters into a rate, on a fixed window so the
+    number on the page means the same thing every time it's read."""
+    while True:
+        await asyncio.sleep(FPS_WINDOW_SECONDS)
+        now = time.time()
+        for dev_id, status in device_status.items():
+            started = status["frames_since"]
+            elapsed = (now - started) if started else FPS_WINDOW_SECONDS
+            status["fps"] = round(status["frames"] / elapsed, 1) if elapsed > 0 else 0.0
+            status["frames"] = 0
+            status["frames_since"] = now
 
 PREVIEW_HTML = """<!DOCTYPE html>
 <html>
@@ -550,6 +575,94 @@ async def ha_create_input_select(app, name, options):
         return False
 
 
+async def discover_wled_devices(app):
+    """WLED devices Home Assistant already knows about.
+
+    The WLED integration records each device's address as its configuration_url,
+    so there's no need to scan the network or ask anyone to type an IP."""
+    try:
+        async with ha_websocket(app) as ha:
+            registry = await ha.call("config/device_registry/list")
+    except Exception as e:
+        log.warning("could not read the device registry: %s", e)
+        return []
+
+    configured_ips = {dev["ip"].split(":")[0] for dev in DEVICES.values()}
+    found = []
+    for device in registry or []:
+        if not any(str(d[0]) == "wled" for d in device.get("identifiers") or [] if len(d) >= 1):
+            continue
+        url = device.get("configuration_url") or ""
+        host = url.split("//")[-1].strip("/")
+        if not host:
+            continue
+        found.append(
+            {
+                "name": device.get("name_by_user") or device.get("name") or host,
+                "host": host,
+                "configured": host in configured_ips,
+            }
+        )
+    found.sort(key=lambda d: d["name"].lower())
+    return found
+
+
+async def add_discovered_device(app, host, name):
+    """Append a device to our own options and restart to pick it up.
+
+    Supervisor lets an add-on rewrite its own options, which is the same thing
+    the Configuration tab does — the restart is because the device list is read
+    at startup."""
+    devices = list(OPTIONS.get("devices", []))
+    if any(str(d.get("ip", "")).split(":")[0] == host for d in devices):
+        return False, "that device is already configured"
+
+    used_ids = {str(d.get("id")) for d in devices}
+    next_id = 1
+    while str(next_id) in used_ids:
+        next_id += 1
+    devices.append({"id": str(next_id), "name": name or host, "ip": host})
+
+    options = {**OPTIONS, "devices": devices}
+    headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}"}
+    async with app["session"].post(
+        "http://supervisor/addons/self/options", json={"options": options}, headers=headers, timeout=10
+    ) as resp:
+        if resp.status >= 300:
+            return False, f"Supervisor refused the change ({resp.status})"
+
+    log.info("added device %s (%s) as id %s; restarting to pick it up", name, host, next_id)
+    asyncio.create_task(restart_self(app))
+    return True, f"added as device {next_id} — restarting"
+
+
+async def restart_self(app):
+    # Give the response a moment to reach the browser before we go down.
+    await asyncio.sleep(1)
+    try:
+        async with app["session"].post(
+            "http://supervisor/addons/self/restart",
+            headers={"Authorization": f"Bearer {SUPERVISOR_TOKEN}"},
+            timeout=30,
+        ) as resp:
+            log.info("restart requested: %s", resp.status)
+    except Exception as e:
+        log.warning("could not restart automatically, restart by hand: %s", e)
+
+
+async def handle_discover(request):
+    return web.json_response(await discover_wled_devices(request.app))
+
+
+async def handle_discover_add(request):
+    body = await request.json()
+    host = str(body.get("host", "")).strip()
+    if not host:
+        raise web.HTTPBadRequest(text="no host given")
+    ok, detail = await add_discovered_device(request.app, host, str(body.get("name", "")).strip())
+    return web.json_response({"ok": ok, "detail": detail})
+
+
 CARD_RESOURCE_PATH = "/local/wled-gateway-card.js"
 
 
@@ -738,6 +851,7 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                         payload = msg.data[4:] if len(msg.data) > 1 and msg.data[1] == 2 else msg.data[2:]
                         if payload:
                             device_status[dev_id]["frame_peak"] = max(payload)
+                        device_status[dev_id]["frames"] += 1
                         # Iterate a snapshot: sending yields to the event loop, so a
                         # viewer connecting or disconnecting mid-frame would otherwise
                         # mutate this set while it's being iterated. That raises
@@ -837,6 +951,14 @@ async def handle_devices(request):
             "connected": device_status[dev_id]["connected"],
             "bri": device_status[dev_id]["bri"],
             "frame_peak": device_status[dev_id]["frame_peak"],
+            "fps": device_status[dev_id]["fps"],
+            "viewers": len(subscribers[dev_id]),
+            "live_view": bool(live_view_on.get(dev_id)),
+            "connected_for": (
+                round(time.time() - device_status[dev_id]["last_connected_at"])
+                if device_status[dev_id]["connected"] and device_status[dev_id]["last_connected_at"]
+                else None
+            ),
         }
         for dev_id, dev in DEVICES.items()
     })
@@ -927,17 +1049,17 @@ INDEX_HTML = """<!DOCTYPE html>
   <meta charset="utf-8">
   <title>WLED Gateway</title>
   <style>
-    body {{ font-family: sans-serif; background: #111; color: #eee; margin: 2em; }}
-    h1 {{ font-weight: 500; }}
-    code, pre {{ background: #222; padding: 0.3em 0.5em; border-radius: 4px; }}
-    pre {{ overflow-x: auto; }}
-    table {{ border-collapse: collapse; margin-top: 1em; width: 100%; }}
-    th, td {{ text-align: left; padding: 0.4em 0.8em; border-bottom: 1px solid #333; }}
-    button {{ margin-left: 0.5em; cursor: pointer; }}
-    a {{ color: #7bc9ff; }}
-    .dot {{ display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.4em; }}
-    .dot.on {{ background: #4caf50; }}
-    .dot.off {{ background: #b33; }}
+    body { font-family: sans-serif; background: #111; color: #eee; margin: 2em; }
+    h1 { font-weight: 500; }
+    code, pre { background: #222; padding: 0.3em 0.5em; border-radius: 4px; }
+    pre { overflow-x: auto; }
+    table { border-collapse: collapse; margin-top: 1em; width: 100%; }
+    th, td { text-align: left; padding: 0.4em 0.8em; border-bottom: 1px solid #333; }
+    button { margin-left: 0.5em; cursor: pointer; }
+    a { color: #7bc9ff; }
+    .dot { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.4em; }
+    .dot.on { background: #4caf50; }
+    .dot.off { background: #b33; }
   </style>
 </head>
 <body>
@@ -945,17 +1067,48 @@ INDEX_HTML = """<!DOCTYPE html>
   <p>This is the base path your Lovelace iframe card URLs need. It's
   detected live from how this page itself was loaded, so it's always
   correct — even after a reinstall changes the Ingress token.</p>
-  <pre id="base">{ingress_path}</pre>
+  <pre id="base">__INGRESS_PATH__</pre>
   <button onclick="navigator.clipboard.writeText(document.getElementById('base').textContent)">Copy</button>
 
   <h2>Configured devices</h2>
   <table>
-    <tr><th>Status</th><th>ID</th><th>Name</th><th>IP</th><th>Preview card URL</th><th>Device Web UI</th></tr>
-    {rows}
+    <tr><th>Status</th><th>ID</th><th>Name</th><th>IP</th><th>Viewers</th><th>FPS</th><th>Preview card URL</th><th>Device Web UI</th></tr>
+    __ROWS__
   </table>
+  <p><small>FPS is 0 with no viewers by design — devices are only asked to
+  stream while something is watching.</small></p>
+
+  <h2>Add a device</h2>
+  <p>WLED devices Home Assistant already knows about. Adding one writes it to
+  this add-on's configuration and restarts it.</p>
+  <div id="discovered">looking…</div>
+  <script>
+    const base = window.location.pathname.replace(/\/$/, '');
+    async function loadDiscovered() {
+      const box = document.getElementById('discovered');
+      try {
+        const found = await (await fetch(base + '/discover')).json();
+        if (!found.length) { box.textContent = 'No WLED devices found in Home Assistant.'; return; }
+        box.innerHTML = '<table><tr><th>Name</th><th>Address</th><th></th></tr>' + found.map(d =>
+          `<tr><td>${d.name}</td><td><code>${d.host}</code></td><td>` +
+          (d.configured ? 'already added'
+            : `<button data-host="${d.host}" data-name="${d.name}">Add</button>`) +
+          '</td></tr>').join('') + '</table>';
+        box.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+          b.disabled = true; b.textContent = 'adding…';
+          const r = await (await fetch(base + '/discover/add', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({host: b.dataset.host, name: b.dataset.name})
+          })).json();
+          b.textContent = r.detail || (r.ok ? 'added' : 'failed');
+        }));
+      } catch (err) { box.textContent = 'Could not look for devices: ' + err.message; }
+    }
+    loadDiscovered();
+  </script>
 
   <h2>Lovelace card</h2>
-  {card_section}
+  __CARD_SECTION__
 </body>
 </html>
 """
@@ -993,6 +1146,7 @@ async def handle_index(request):
         return (
             f"<tr><td><span class='dot {dot_class}' title='{dot_title}'></span>{dot_title}</td>"
             f"<td>{safe_id}</td><td>{html.escape(dev['name'])}</td><td>{html.escape(dev['ip'])}</td>"
+            f"<td>{len(subscribers[dev_id])}</td><td>{device_status[dev_id]['fps']}</td>"
             f"<td><code>{ingress_path}/preview?wled={safe_id}</code></td>"
             f"<td><a href='{ingress_path}/device/{safe_id}/' target='_blank'>Open</a></td></tr>"
         )
@@ -1017,10 +1171,15 @@ async def handle_index(request):
     else:
         card_section = CARD_SECTION_UNAVAILABLE.format(detail=html.escape(card_status["detail"]))
 
-    return web.Response(
-        text=INDEX_HTML.format(ingress_path=ingress_path, rows=rows, card_section=card_section),
-        content_type="text/html",
+    # Plain substitution rather than str.format: the page embeds JavaScript, and
+    # having to double every brace in it is a trap that has bitten this page
+    # before.
+    page = (
+        INDEX_HTML.replace("__INGRESS_PATH__", ingress_path)
+        .replace("__ROWS__", rows)
+        .replace("__CARD_SECTION__", card_section)
     )
+    return web.Response(text=page, content_type="text/html")
 
 
 async def on_startup(app):
@@ -1029,6 +1188,7 @@ async def on_startup(app):
     if card_status["installed"] and AUTO_REGISTER_CARD:
         await register_lovelace_resource(app)
     app["slug"] = await fetch_own_slug(app)
+    app["fps_task"] = asyncio.create_task(measure_frame_rates())
     app["upstream_tasks"] = [
         asyncio.create_task(upstream_loop(app, dev_id, dev["ip"], dev.get("input_select")))
         for dev_id, dev in DEVICES.items()
@@ -1036,6 +1196,7 @@ async def on_startup(app):
 
 
 async def on_cleanup(app):
+    app["fps_task"].cancel()
     for t in app["upstream_tasks"]:
         t.cancel()
     await app["session"].close()
@@ -1048,6 +1209,8 @@ app.router.add_get("/preview2d", handle_preview2d)
 app.router.add_get("/ws/{id}", handle_ws)
 app.router.add_get("/json/{id}/live", handle_json_live)
 app.router.add_get("/devices", handle_devices)
+app.router.add_get("/discover", handle_discover)
+app.router.add_post("/discover/add", handle_discover_add)
 app.router.add_get("/device/{id}", handle_device_root_redirect)
 app.router.add_route("*", "/device/{id}/{path:.*}", handle_device_proxy)
 app.on_startup.append(on_startup)

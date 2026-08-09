@@ -21,7 +21,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.9.1";
+const CARD_VERSION = "1.10.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -238,6 +238,11 @@ class WledGatewayCard extends HTMLElement {
       // size; this only constrains what's drawn.
       width: null,
       align: "center", // center | left | right, when width is narrower than the card
+      // Show only part of the strip, for a device split into segments.
+      from: null,
+      to: null,
+      // device | more-info | url | navigate | none
+      tap_action: { action: "device" },
       aspect_ratio: null,
       fill: true,
       normalize: true,
@@ -283,6 +288,46 @@ class WledGatewayCard extends HTMLElement {
       columns: cfg.view === "ring" ? 6 : vertical ? 3 : 12,
       min_columns: vertical ? 1 : 3,
     };
+  }
+
+  // Home Assistant renamed this to getGridOptions; keep the old name working so
+  // the size controls appear on older versions too.
+  getLayoutOptions() {
+    return this.getGridOptions();
+  }
+
+  /* ---------------- tapping ---------------- */
+
+  _handleTap() {
+    const action = (this._config.tap_action && this._config.tap_action.action) || "device";
+    if (action === "none") return;
+
+    if (action === "device") {
+      // The add-on proxies each device's own WLED UI, so this works from
+      // anywhere Home Assistant does — no need to be on the same network.
+      if (this._path) window.open(`${this._path}/device/${this._config.device}/`, "_blank");
+      return;
+    }
+    if (action === "url" && this._config.tap_action.url_path) {
+      window.open(this._config.tap_action.url_path, "_blank");
+      return;
+    }
+    if (action === "navigate" && this._config.tap_action.navigation_path) {
+      history.pushState(null, "", this._config.tap_action.navigation_path);
+      window.dispatchEvent(new CustomEvent("location-changed", { bubbles: true, composed: true }));
+      return;
+    }
+    if (action === "more-info") {
+      const entityId = this._config.tap_action.entity || this._config.entity;
+      if (!entityId) return;
+      this.dispatchEvent(
+        new CustomEvent("hass-more-info", {
+          detail: { entityId },
+          bubbles: true,
+          composed: true,
+        })
+      );
+    }
   }
 
   connectedCallback() {
@@ -420,6 +465,7 @@ class WledGatewayCard extends HTMLElement {
       <style>
         ha-card { overflow: hidden; }
         .wrap { position: relative; background: #000; overflow: hidden; }
+        .wrap.tappable { cursor: pointer; }
         /* Absolute, so the canvas can never contribute to layout. Sized from
            its own box it would feed back through devicePixelRatio — each pass
            measuring the size it just grew to — and run away down the page. */
@@ -434,7 +480,7 @@ class WledGatewayCard extends HTMLElement {
         .hidden { display: none; }
       </style>
       <ha-card ${cfg.title ? `header="${cfg.title}"` : ""}>
-        <div class="wrap">
+        <div class="wrap${(cfg.tap_action && cfg.tap_action.action) !== "none" ? " tappable" : ""}">
           <canvas></canvas>
           <div class="msg">connecting…</div>
         </div>
@@ -442,6 +488,9 @@ class WledGatewayCard extends HTMLElement {
     `;
     this._canvas = this.shadowRoot.querySelector("canvas");
     this._wrap = this.shadowRoot.querySelector(".wrap");
+    if (this._wrap && this._wrap.addEventListener) {
+      this._wrap.addEventListener("click", () => this._handleTap());
+    }
     this._msg = this.shadowRoot.querySelector(".msg");
     // No CSS transform for `rotate` — it's applied while drawing, so the canvas
     // keeps the card's own shape instead of being turned inside it.
@@ -605,16 +654,36 @@ class WledGatewayCard extends HTMLElement {
     this._paint(bytes);
   }
 
+  // from/to select a slice of the strip, for one segment of a longer run. Only
+  // meaningful for a linear frame — a matrix is addressed by its own grid.
+  _range(bytes, offset) {
+    const count = Math.floor((bytes.length - offset) / 3);
+    const from = Math.max(0, parseInt(this._config.from, 10) || 0);
+    const to = this._config.to === null || this._config.to === undefined
+      ? count
+      : Math.min(count, parseInt(this._config.to, 10) + 1 || count);
+    if (from === 0 && to >= count) return { bytes, offset };
+    if (to <= from) return { bytes, offset };
+    // Rebuild a frame containing just the slice, so everything downstream —
+    // peak tracking, drawing, rotation — works on it unchanged.
+    const sliced = new Uint8Array(offset + (to - from) * 3);
+    sliced.set(bytes.subarray(0, offset), 0);
+    sliced.set(bytes.subarray(offset + from * 3, offset + to * 3), offset);
+    return { bytes: sliced, offset };
+  }
+
   _paint(bytes) {
     const is2d = bytes[1] === 2;
     const offset = is2d ? 4 : 2;
     const view = this._config.view;
+    const wantMatrix = view === "matrix" || (view === "auto" && is2d);
+    if (wantMatrix && is2d) return this._drawMatrix(bytes);
+
+    const sliced = this._range(bytes, offset);
     // Ring is never auto-detected — nothing in the frame says the strip is bent
     // into a circle, so it has to be asked for.
-    if (view === "ring") return this._drawRing(bytes, offset);
-    const wantMatrix = view === "matrix" || (view === "auto" && is2d);
-    if (wantMatrix && is2d) this._drawMatrix(bytes);
-    else this._drawStrip(bytes, offset);
+    if (view === "ring") return this._drawRing(sliced.bytes, sliced.offset);
+    this._drawStrip(sliced.bytes, sliced.offset);
   }
 
   _drawRing(bytes, offset) {
@@ -774,12 +843,15 @@ const LABELS = {
   height: "Height (e.g. 40px)",
   width: "Width (e.g. 15px)",
   align: "Alignment",
+  from: "First LED",
+  to: "Last LED",
   aspect_ratio: "Aspect ratio (e.g. 16:9 or 5%)",
   ring_thickness: "Ring thickness",
   reverse: "Reverse direction",
   normalize: "Follow the device's brightness",
   bright: "Fixed brightness %  (0 = follow device)",
   gain: "Extra gain",
+  tap_action: "When tapped (default: open the device's own page)",
   ingress_path: "Ingress path (advanced)",
 };
 
@@ -883,6 +955,10 @@ class WledGatewayCardEditor extends HTMLElement {
       },
       { name: "title", selector: { text: {} } },
       {
+        name: "tap_action",
+        selector: { ui_action: { actions: ["more-info", "url", "navigate", "none"] } },
+      },
+      {
         name: "",
         type: "expandable",
         title: "Layout",
@@ -905,6 +981,15 @@ class WledGatewayCardEditor extends HTMLElement {
             },
           },
           { name: "aspect_ratio", selector: { text: {} } },
+        ],
+      },
+      {
+        name: "",
+        type: "expandable",
+        title: "Part of the strip",
+        schema: [
+          { name: "from", selector: { number: { min: 0, mode: "box" } } },
+          { name: "to", selector: { number: { min: 0, mode: "box" } } },
         ],
       },
       {

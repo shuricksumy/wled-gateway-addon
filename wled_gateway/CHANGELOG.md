@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.11.0
+- Add devices without typing an address. Home Assistant already knows every
+  WLED device and where it lives, so the add-on's page now lists them, marks
+  the ones already set up, and adds the rest in one click — writing its own
+  configuration and restarting to pick them up.
+- The page also shows what each device is doing: how many viewers are watching
+  and the frame rate it's actually delivering. A device sitting at 0 FPS with
+  no viewers is idle on purpose, not broken.
+- Card: tapping a preview opens that device's own WLED page, with `tap_action`
+  to change or disable it.
+- Card: `from`/`to` to preview part of a strip, for a run split into segments.
+- Card: reports its size to older Home Assistant versions too, so the native
+  layout controls appear regardless of version.
+
 ## 1.10.1
 - The editor fills in the add-on for any card that doesn't name one, not just
   cards added from the picker — so a card pasted as YAML, or written before the

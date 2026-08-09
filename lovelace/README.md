@@ -83,6 +83,8 @@ what each one does.
 | `align` | `center` | `center`, `left` or `right`, when `width` is narrower than the card. |
 | `aspect_ratio` | — | `16:9`, `2/1`, or a percentage like `5%` (height as a share of width, as the built-in iframe card uses). |
 | `title` | — | Card header. Omit for no header. |
+| `tap_action` | open device | What tapping does: opens that device's own WLED page by default. Also `more-info`, `url`, `navigate`, `none`. |
+| `from` / `to` | — | Show only part of the strip, e.g. `from: 0`, `to: 59` for the first 60 LEDs. Ignored for a matrix. |
 | `normalize` | `true` | Scale the preview up as the device dims. See [Brightness](#brightness). |
 | `bright` | `0` | Fixed percentage, ignoring the device's brightness. `100` = colours exactly as received. `0` follows the device. |
 | `gain` | `1` | Extra multiplier on top of whichever mode is active. |
@@ -115,7 +117,9 @@ LED physically sits.
 ## Sizing
 
 By default the card fills whatever space it's given, so in a sections dashboard
-you can just drag its resize handle.
+you can size it with the **Layout** tab or by dragging its resize handle —
+the card reports its size to Home Assistant like a built-in one, so the native
+controls work and `height`/`width` are only needed for a fixed size.
 
 **Put the card straight into the section**, not inside a `grid` card. A card can
 only fill a height something above it actually defines: a section's grid cell

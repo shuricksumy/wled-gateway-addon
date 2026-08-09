@@ -27,8 +27,10 @@ Nothing, if you're running the add-on: it installs the card into
 `<config>/www` and registers it as a dashboard resource on startup. Add a card
 and it works.
 
-The add-on's **Web UI** shows a ready-made card with your slug already filled
-in, plus what it did with the resource.
+Add it from **Add card → WLED Gateway preview** and it configures itself: the
+add-on and your first device are filled in, and everything below has a control
+in the editor. The add-on's **Web UI** also shows a ready-made card if you'd
+rather paste YAML.
 
 ```yaml
 type: custom:wled-gateway-card
@@ -62,6 +64,9 @@ page says so and leaves your configuration alone.
 ---
 
 ## Options
+
+All of these have a control in the visual editor; the table is for YAML and for
+what each one does.
 
 | Option | Default | Description |
 | --- | --- | --- |

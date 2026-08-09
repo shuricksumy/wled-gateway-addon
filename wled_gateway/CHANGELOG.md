@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.0
+- The card now has a visual editor, so it can be configured from the UI like
+  any built-in card instead of only in YAML — with the shape, layout, ring and
+  brightness settings grouped rather than presented as one long list.
+- Picking it from the card list fills in the add-on and its first device
+  automatically, so the preview shows something real straight away, and the
+  device is chosen from a dropdown of your actual devices by name.
+
 ## 1.9.0
 - The card is now registered as a dashboard resource for you, so there's
   nothing left to do by hand: install the add-on, and the card is available.

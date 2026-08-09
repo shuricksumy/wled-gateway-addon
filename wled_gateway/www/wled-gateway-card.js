@@ -21,7 +21,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.8.0";
+const CARD_VERSION = "1.9.0";
 
 /* ------------------------------------------------------------------ *
  * Ingress session, shared by every card on the dashboard so a page of
@@ -127,6 +127,45 @@ function resolveIngressPath(hass, slug) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Discovery, for the editor: which add-on, and which devices it has.
+ * ------------------------------------------------------------------ */
+
+let addonSlugPromise = null;
+
+// Listing add-ons needs admin, which anyone editing a dashboard has. Used only
+// to save typing — the card itself never needs it.
+function findAddonSlug(hass) {
+  if (addonSlugPromise) return addonSlugPromise;
+  addonSlugPromise = hass
+    .callWS({ type: "supervisor/api", endpoint: "/addons", method: "get" })
+    .then((result) => {
+      const addons = (result && result.addons) || [];
+      const mine = addons.find((a) => String(a.slug || "").endsWith("wled_gateway"));
+      if (!mine) throw new Error("WLED Gateway add-on not found");
+      return mine.slug;
+    })
+    .catch((err) => {
+      addonSlugPromise = null;
+      throw err;
+    });
+  return addonSlugPromise;
+}
+
+const deviceLists = {};
+
+// The add-on's own /devices endpoint, so the editor can offer real device names
+// instead of asking for an id that only exists in the add-on's config.
+function listDevices(hass, slug) {
+  if (!slug) return Promise.resolve({});
+  if (deviceLists[slug]) return deviceLists[slug];
+  deviceLists[slug] = Promise.all([ensureSession(hass), resolveIngressPath(hass, slug)])
+    .then(([, path]) => fetch(`${path}/devices`, { credentials: "same-origin" }))
+    .then((resp) => (resp.ok ? resp.json() : {}))
+    .catch(() => ({}));
+  return deviceLists[slug];
+}
+
+/* ------------------------------------------------------------------ *
  * The card
  * ------------------------------------------------------------------ */
 
@@ -149,8 +188,21 @@ class WledGatewayCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
   }
 
-  static getStubConfig() {
-    return { addon: "", device: "1" };
+  static getConfigElement() {
+    return document.createElement("wled-gateway-card-editor");
+  }
+
+  // Called when the card is picked from the card list. Finding the add-on and
+  // its first device here means the preview shows something real immediately,
+  // rather than an error telling you to go and look up a slug.
+  static async getStubConfig(hass) {
+    try {
+      const slug = await findAddonSlug(hass);
+      const devices = await listDevices(hass, slug);
+      return { addon: slug, device: Object.keys(devices)[0] || "1" };
+    } catch (err) {
+      return { addon: "", device: "1" };
+    }
   }
 
   setConfig(config) {
@@ -708,11 +760,181 @@ class WledGatewayCard extends HTMLElement {
 
 customElements.define("wled-gateway-card", WledGatewayCard);
 
+/* ------------------------------------------------------------------ *
+ * Visual editor
+ * ------------------------------------------------------------------ */
+
+const LABELS = {
+  addon: "Add-on",
+  device: "Device",
+  view: "Shape",
+  title: "Card title",
+  rotate: "Rotation",
+  fill: "Fill the card",
+  height: "Height (e.g. 40px)",
+  width: "Width (e.g. 15px)",
+  align: "Alignment",
+  aspect_ratio: "Aspect ratio (e.g. 16:9 or 5%)",
+  ring_thickness: "Ring thickness",
+  reverse: "Reverse direction",
+  normalize: "Follow the device's brightness",
+  bright: "Fixed brightness %  (0 = follow device)",
+  gain: "Extra gain",
+  ingress_path: "Ingress path (advanced)",
+};
+
+class WledGatewayCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._config = {};
+    this._devices = {};
+  }
+
+  setConfig(config) {
+    this._config = config || {};
+    this._loadDevices();
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._loadDevices();
+    this._render();
+  }
+
+  _loadDevices() {
+    const slug = this._config.addon;
+    if (!this._hass || !slug || this._devicesFor === slug) return;
+    this._devicesFor = slug;
+    listDevices(this._hass, slug).then((devices) => {
+      this._devices = devices || {};
+      this._render();
+    });
+  }
+
+  _schema() {
+    const deviceIds = Object.keys(this._devices);
+    // Offer real devices once they're known; fall back to a plain text field so
+    // the editor still works before discovery finishes, or if it fails.
+    const deviceSelector = deviceIds.length
+      ? {
+          select: {
+            mode: "dropdown",
+            options: deviceIds.map((id) => ({
+              value: id,
+              label: `${this._devices[id].name || id} (${id})`,
+            })),
+          },
+        }
+      : { text: {} };
+
+    return [
+      { name: "addon", selector: { text: {} } },
+      { name: "device", selector: deviceSelector },
+      {
+        name: "view",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "auto", label: "Auto — bar, or grid for a matrix" },
+              { value: "strip", label: "Strip — a bar of LEDs" },
+              { value: "matrix", label: "Matrix — a grid of dots" },
+              { value: "ring", label: "Ring — bent into a circle" },
+            ],
+          },
+        },
+      },
+      { name: "title", selector: { text: {} } },
+      {
+        name: "",
+        type: "expandable",
+        title: "Layout",
+        schema: [
+          { name: "rotate", selector: { number: { min: 0, max: 359, mode: "box" } } },
+          { name: "fill", selector: { boolean: {} } },
+          { name: "height", selector: { text: {} } },
+          { name: "width", selector: { text: {} } },
+          {
+            name: "align",
+            selector: {
+              select: {
+                mode: "dropdown",
+                options: [
+                  { value: "center", label: "Center" },
+                  { value: "left", label: "Left" },
+                  { value: "right", label: "Right" },
+                ],
+              },
+            },
+          },
+          { name: "aspect_ratio", selector: { text: {} } },
+        ],
+      },
+      {
+        name: "",
+        type: "expandable",
+        title: "Ring",
+        schema: [
+          {
+            name: "ring_thickness",
+            selector: { number: { min: 0.05, max: 1, step: 0.05, mode: "slider" } },
+          },
+          { name: "reverse", selector: { boolean: {} } },
+        ],
+      },
+      {
+        name: "",
+        type: "expandable",
+        title: "Brightness",
+        schema: [
+          { name: "normalize", selector: { boolean: {} } },
+          { name: "bright", selector: { number: { min: 0, max: 800, mode: "box" } } },
+          { name: "gain", selector: { number: { min: 0.1, max: 10, step: 0.05, mode: "box" } } },
+        ],
+      },
+    ];
+  }
+
+  _render() {
+    if (!this._hass) return;
+    if (!this._form) {
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = (entry) => LABELS[entry.name] || entry.name;
+      this._form.addEventListener("value-changed", (ev) => this._valueChanged(ev));
+      this.appendChild(this._form);
+    }
+    this._form.hass = this._hass;
+    this._form.schema = this._schema();
+    this._form.data = this._config;
+  }
+
+  _valueChanged(ev) {
+    const value = { ...ev.detail.value };
+    // ha-form hands back every key it rendered; dropping the empty ones keeps
+    // the YAML as short as what someone would have written by hand.
+    for (const [key, val] of Object.entries(value)) {
+      if (val === "" || val === undefined || val === null) delete value[key];
+    }
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: value },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+}
+
+customElements.define("wled-gateway-card-editor", WledGatewayCardEditor);
+
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "wled-gateway-card",
   name: "WLED Gateway preview",
   description: "Live WLED preview that authenticates itself, so it survives switching between local and remote URLs.",
+  preview: true,
+  documentationURL: "https://github.com/shuricksumy/wled-gateway-addon/tree/main/lovelace",
 });
 
 console.info(`%c WLED-GATEWAY-CARD %c ${CARD_VERSION} `, "color:#fff;background:#4a4;font-weight:700", "color:#4a4;background:#222");

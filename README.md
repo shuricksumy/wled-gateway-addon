@@ -110,7 +110,7 @@ options, the endpoint reference, and copy-pasteable Lovelace card examples.
 
 | Document | What's in it |
 | --- | --- |
-| 📖 **[Add-on README](wled_gateway/README.md)** | Configuration, effect sync, preview brightness, endpoints, iframe card examples, troubleshooting. |
+| 📖 **[Add-on README](wled_gateway/README.md)** | Configuration, effect sync, preview brightness, endpoints, dashboard card examples, troubleshooting. |
 | 🎴 **[Lovelace card](lovelace/README.md)** | The card the add-on installs: every option, the four shapes, and worked examples. |
 | 📝 **[Changelog](wled_gateway/CHANGELOG.md)** | Release history. |
 | 🛠️ **[Development](DEVELOPMENT.md)** | Running the add-on locally, with a faster loop than a full Supervisor install. |

@@ -172,20 +172,24 @@ device and the preview ignores the device's brightness completely:
 | `175` | The boost this preview used before it followed the device |
 | `300`+ | Punchier, for a preview that has to read from across the room |
 
-Per card, the URL wins over the setting:
+Per card, the card's own settings win over the device's:
 
-| Parameter | Effect |
+| Option | Effect |
 |---|---|
-| `&bright=100` | Pin to a constant percentage, ignoring the device |
-| `&normalize=0` | True look — preview dims with the device |
-| `&normalize=1` | Scale up as the device dims |
-| `&gain=1.5` | Extra multiplier on top of whichever mode is active |
+| `bright: 100` | Pin to a constant percentage, ignoring the device |
+| `normalize: false` | True look — preview dims with the device |
+| `normalize: true` | Scale up as the device dims |
+| `gain: 1.5` | Extra multiplier on top of whichever mode is active |
 
 ```yaml
-type: iframe
-url: INGRESS/preview?wled=1&bright=100   # this card only
-aspect_ratio: 5%
+type: custom:wled-gateway-card
+addon: YOUR_ADDON_SLUG
+device: "1"
+bright: 100        # this card only
 ```
+
+Iframe cards take the same three as URL parameters — `&bright=100`,
+`&normalize=0`, `&gain=1.5`.
 
 **Worth knowing**: at very low brightness the device has already crushed the
 colours into a handful of levels before sending them, so scaling back up looks
@@ -194,122 +198,16 @@ dimmed strip previews as drifting speckle. Scaling is applied per pixel as a
 whole, so a boosted colour keeps its hue instead of shifting as one channel
 saturates. It's a dashboard preview, not a colour-accurate instrument.
 
-## Finding your Ingress URL
+## Dashboard cards
 
-Open the add-on's **Web UI** — the add-on's own home page shows exactly the
-base path your Lovelace cards need, plus a ready-made preview URL for every
-configured device, with a copy button. It's generated fresh on every page
-load (via the `X-Ingress-Path` header Supervisor sends), so it's always
-correct — open it any time you need the current value, including right
-after a reinstall changes the token.
+Previews go on a dashboard through the add-on's own card, which is installed
+and registered for you — **Add card → WLED Gateway preview**, and it fills in
+the add-on and your first device itself. Its options are documented in the
+[card's README](../lovelace/README.md).
 
-If you'd rather read it straight from the browser: the address bar shows
-something like:
-
-```
-http://<your-ha-host>:8123/api/hassio_ingress/<token>/
-```
-
-The `/api/hassio_ingress/<token>/` part is what your Lovelace cards need.
-This token is assigned once per install; if you ever uninstall and
-reinstall the add-on, it changes and your card URLs need updating (or see
-"Avoiding hardcoded tokens" below to sidestep that entirely).
-
-Because it's a relative, same-origin path, it works identically whether
-you're viewing the dashboard on your LAN, through a local domain, or from
-outside via an external tunnel — no separate configuration per access
-method.
-
-## Avoiding hardcoded tokens in your cards
-
-Since the Ingress token changes if you ever reinstall the add-on, hardcoding
-it into every card means updating every card by hand when that happens. If
-you have the [config-template-card](https://github.com/iantrich/config-template-card)
-HACS card installed, you can make it a single source of truth instead:
-
-1. Add an `input_text` helper to hold the base path:
-
-```yaml
-# input_text.yaml (or your own input_texts include)
-wled_base_url:
-  name: WLED Base URL
-  max: 255
-  initial: /api/hassio_ingress/your-token-here
-```
-
-Create it either by adding that YAML and restarting Home Assistant, or via
-**Settings → Devices & Services → Helpers → + Create Helper → Text**, name
-it "WLED Base URL", and paste in your current Ingress path (found on this
-add-on's own info page) as its value.
-
-2. Wrap each iframe card in `config-template-card`, templating the URL from
-   that helper instead of hardcoding it:
-
-```yaml
-type: custom:config-template-card
-variables:
-  WLED_BASE_URL: states['input_text.wled_base_url'].state
-entities:
-  - input_text.wled_base_url
-card:
-  type: iframe
-  url: ${WLED_BASE_URL + '/preview?wled=1'}
-  aspect_ratio: 5%
-  title: null
-```
-
-Now, whenever the token changes, update the one `input_text` value (via
-Developer Tools → States, or its own card) and every card picks it up
-automatically — no hunting through dashboards.
-
-## Endpoints
-
-| Path | What it does |
-|---|---|
-| `/preview?wled=<id>` | Linear preview — a single gradient bar of all LEDs. Good for LED strips. Optional `&rotate=90\|180\|270` to rotate the bar, `&bright=<pct>`, `&normalize=0\|1` and `&gain=<n>` for [brightness](#preview-brightness). |
-| `/preview2d?wled=<id>` | 2D preview — a dot-matrix canvas, for matrix/panel devices. Takes the same `&bright` / `&normalize` / `&gain` as above. |
-| `/ws/<id>` | Raw relay WebSocket, if you're building your own frontend instead of using the built-in pages. |
-| `/json/<id>/live` | Passthrough to the device's own `/json/live` HTTP endpoint. |
-| `/devices` | JSON list of configured devices and live connection status, for debugging. |
-| `/device/<id>/` | Reverse proxy for the device's own admin web UI — open it directly, or embed it in a card (see below). |
-
-## Device web UI (setup & debugging)
-
-Each device's own WLED admin interface is reachable at `/device/<id>/` —
-linked directly from the add-on's info page (the "Open" link per device).
-Useful for changing settings, checking logs, or debugging a device without
-leaving Home Assistant or hunting down its raw IP.
-
-It can also go straight into a Lovelace card:
-
-![WLED's own admin web UI running inside a Home Assistant card via the device proxy — power, timer, sync, color wheel, effects/segments/presets tabs](screenshots/device-ui.png)
-
-```yaml
-type: custom:config-template-card
-variables:
-  WLED_BASE_URL: states['input_text.wled_base_url'].state
-entities:
-  - input_text.wled_base_url
-card:
-  type: iframe
-  url: ${WLED_BASE_URL + '/device/1'}
-  aspect_ratio: 150%
-  title: null
-```
-
-**Known limitation**: WLED's own web UI wasn't built to run under a URL
-sub-path, so if any of its assets or internal API calls use absolute
-(leading-slash) paths, those specific requests will miss the proxy. Most of
-the interface loads and works fine since it's largely relative-path based;
-the most likely thing to not fully work is its own internal WebSocket for
-live state updates. If something looks broken, opening the device's raw IP
-directly is always the fallback.
-
-## Lovelace card examples
-
-All examples below use synthetic device names/IPs matching the
-Configuration example above. Replace `INGRESS` with your actual
-`/api/hassio_ingress/<token>` path.
+The examples below use synthetic names matching the Configuration example
+above. `addon:` is filled in for you when you add a card from the UI; it's
+written out here because YAML examples can't do that.
 
 **Basic strip preview**, shown only while the light is on:
 
@@ -319,10 +217,10 @@ conditions:
   - entity: light.wled_living_room
     state: "on"
 card:
-  type: iframe
-  url: INGRESS/preview?wled=1
-  aspect_ratio: 5%
-  title: null
+  type: custom:wled-gateway-card
+  addon: YOUR_ADDON_SLUG
+  device: "1"
+  height: 12px
 ```
 
 **Full strip device card** — live preview plus Home Assistant's own WLED
@@ -357,10 +255,10 @@ cards:
       - entity: light.wled_living_room
         state: "on"
     card:
-      type: iframe
-      url: INGRESS/preview?wled=1
-      aspect_ratio: 5%
-      title: null
+      type: custom:wled-gateway-card
+      addon: YOUR_ADDON_SLUG
+      device: "1"
+      height: 12px
   - square: false
     type: grid
     columns: 4
@@ -453,10 +351,11 @@ cards:
       - entity: light.wled_matrix
         state: "on"
     card:
-      type: iframe
-      url: INGRESS/preview2d?wled=3
-      aspect_ratio: 51%
-      title: null
+      type: custom:wled-gateway-card
+      addon: YOUR_ADDON_SLUG
+      device: "3"
+      view: matrix
+      height: 200px
   - square: false
     type: grid
     columns: 6
@@ -546,15 +445,18 @@ plus a separate light card next to it in the same section.
 Preview card:
 
 ```yaml
-type: horizontal-stack
-cards:
-  - type: iframe
-    url: INGRESS/preview?wled=4&rotate=270
-    title: null
+type: custom:wled-gateway-card
+addon: YOUR_ADDON_SLUG
+device: "4"
+rotate: 270
+width: 15px
 grid_options:
   columns: 1
   rows: 7
 ```
+
+The card draws a rotated strip as a genuinely tall card, so this needs no
+wrapper, no fixed pixel height and no card-mod — which the iframe version did.
 
 Light card, placed alongside it in the same grid section:
 
@@ -569,7 +471,139 @@ grid_options:
   rows: 1
 ```
 
-## Full-height vertical strip (advanced)
+## Endpoints
+
+| Path | What it does |
+|---|---|
+| `/preview?wled=<id>` | Linear preview — a single gradient bar of all LEDs. Good for LED strips. Optional `&rotate=90\|180\|270` to rotate the bar, `&bright=<pct>`, `&normalize=0\|1` and `&gain=<n>` for [brightness](#preview-brightness). |
+| `/preview2d?wled=<id>` | 2D preview — a dot-matrix canvas, for matrix/panel devices. Takes the same `&bright` / `&normalize` / `&gain` as above. |
+| `/ws/<id>` | Raw relay WebSocket, if you're building your own frontend instead of using the built-in pages. |
+| `/json/<id>/live` | Passthrough to the device's own `/json/live` HTTP endpoint. |
+| `/devices` | JSON list of configured devices and live connection status, for debugging. |
+| `/device/<id>/` | Reverse proxy for the device's own admin web UI — open it directly, or embed it in a card (see below). |
+
+## Device web UI (setup & debugging)
+
+Each device's own WLED admin interface is reachable at `/device/<id>/` —
+linked directly from the add-on's info page (the "Open" link per device).
+Useful for changing settings, checking logs, or debugging a device without
+leaving Home Assistant or hunting down its raw IP.
+
+A preview card also opens it when tapped, which is the quickest way in — see
+`tap_action` in the [card's README](../lovelace/README.md).
+
+To embed the device's UI in a card of its own, an iframe is still the way (the
+preview card draws the live view, not the device's whole interface):
+
+![WLED's own admin web UI running inside a Home Assistant card via the device proxy — power, timer, sync, color wheel, effects/segments/presets tabs](screenshots/device-ui.png)
+
+```yaml
+type: custom:config-template-card
+variables:
+  WLED_BASE_URL: states['input_text.wled_base_url'].state
+entities:
+  - input_text.wled_base_url
+card:
+  type: iframe
+  url: ${WLED_BASE_URL + '/device/1'}
+  aspect_ratio: 150%
+  title: null
+```
+
+**Known limitation**: WLED's own web UI wasn't built to run under a URL
+sub-path, so if any of its assets or internal API calls use absolute
+(leading-slash) paths, those specific requests will miss the proxy. Most of
+the interface loads and works fine since it's largely relative-path based;
+the most likely thing to not fully work is its own internal WebSocket for
+live state updates. If something looks broken, opening the device's raw IP
+directly is always the fallback.
+
+## Using iframe cards instead
+
+The card above is the supported route: it authenticates itself, so it survives
+the Companion app switching between your local and remote URLs, and it needs no
+token in your configuration.
+
+Plain `iframe` cards still work, and the endpoints they use aren't going
+anywhere. They're kept here because they cost more to live with — the Ingress
+token has to go in every card, it changes if the add-on is reinstalled, and
+requests hit Ingress directly, which is where the `401` after a network switch
+comes from.
+
+<details>
+<summary><b>Iframe card setup and examples</b></summary>
+
+<br>
+
+### Finding your Ingress URL
+
+Open the add-on's **Web UI** — the add-on's own home page shows exactly the
+base path your Lovelace cards need, plus a ready-made preview URL for every
+configured device, with a copy button. It's generated fresh on every page
+load (via the `X-Ingress-Path` header Supervisor sends), so it's always
+correct — open it any time you need the current value, including right
+after a reinstall changes the token.
+
+If you'd rather read it straight from the browser: the address bar shows
+something like:
+
+```
+http://<your-ha-host>:8123/api/hassio_ingress/<token>/
+```
+
+The `/api/hassio_ingress/<token>/` part is what your Lovelace cards need.
+This token is assigned once per install; if you ever uninstall and
+reinstall the add-on, it changes and your card URLs need updating (or see
+"Avoiding hardcoded tokens" below to sidestep that entirely).
+
+Because it's a relative, same-origin path, it works identically whether
+you're viewing the dashboard on your LAN, through a local domain, or from
+outside via an external tunnel — no separate configuration per access
+method.
+
+### Avoiding hardcoded tokens in your cards
+
+Since the Ingress token changes if you ever reinstall the add-on, hardcoding
+it into every card means updating every card by hand when that happens. If
+you have the [config-template-card](https://github.com/iantrich/config-template-card)
+HACS card installed, you can make it a single source of truth instead:
+
+1. Add an `input_text` helper to hold the base path:
+
+```yaml
+# input_text.yaml (or your own input_texts include)
+wled_base_url:
+  name: WLED Base URL
+  max: 255
+  initial: /api/hassio_ingress/your-token-here
+```
+
+Create it either by adding that YAML and restarting Home Assistant, or via
+**Settings → Devices & Services → Helpers → + Create Helper → Text**, name
+it "WLED Base URL", and paste in your current Ingress path (found on this
+add-on's own info page) as its value.
+
+2. Wrap each iframe card in `config-template-card`, templating the URL from
+   that helper instead of hardcoding it:
+
+```yaml
+type: custom:config-template-card
+variables:
+  WLED_BASE_URL: states['input_text.wled_base_url'].state
+entities:
+  - input_text.wled_base_url
+card:
+  type: iframe
+  url: ${WLED_BASE_URL + '/preview?wled=1'}
+  aspect_ratio: 5%
+  title: null
+```
+
+Now, whenever the token changes, update the one `input_text` value (via
+Developer Tools → States, or its own card) and every card picks it up
+automatically — no hunting through dashboards.
+
+### Full-height vertical strip (advanced)
 
 The rotated preview above still sizes itself by `aspect_ratio` (a
 percentage of its own width), not by the actual height of its grid cell —
@@ -730,17 +764,24 @@ cards:
 (repeat the light-card + gear-button pair for the matrix and the right
 strip, matching their own entities)
 
+</details>
+
 ## Troubleshooting
 
-- **Iframe shows a blank card / "unable to load iframes... http:"** — this
-  happens if you hardcode an `http://` address instead of the relative
-  Ingress path. Always use the `/api/hassio_ingress/<token>/...` form, never
-  a raw container IP:port, so it works over both http and https.
-- **Preview never lights up** — check the add-on's log for `upstream
-  connected: <id> (<ip>)` on startup. If it's missing or retrying, the
-  device's IP in Configuration is wrong or it's unreachable.
-- **Card 404s after reinstalling the add-on** — the Ingress token changed;
-  grab the new one from the Web UI and update your card URLs.
+- **Preview never lights up** — check the add-on's own page: a device showing
+  as not connected is unreachable, and its address in Configuration is the
+  place to look. The log says the same thing (`upstream connected: <id>`).
+- **Preview shows "Device unreachable"** — the add-on can't reach that device.
+  Its own WLED page, linked from the add-on's device list, is the quickest
+  check.
+- **A card is blank, no message** — its `device` doesn't match any device in
+  the add-on's configuration. The card editor lists the real ones.
+- **Card problems in general** — see the card's own
+  [troubleshooting](../lovelace/README.md#troubleshooting).
+- **Iframe cards only:** a blank card or *"unable to load iframes... http:"*
+  means an `http://` address was hardcoded instead of the relative Ingress
+  path, and a `404` after reinstalling means the Ingress token changed. The
+  card avoids both, since it resolves the path itself.
 - **Effect dropdown never populates** — check the add-on's log for `synced
   N effects to input_select...`. If you instead see `HA set_options
   failed`, confirm the `input_select` entity ID in Configuration is exactly

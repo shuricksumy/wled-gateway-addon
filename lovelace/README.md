@@ -261,6 +261,15 @@ card:
 
 ---
 
+## When a device is unreachable
+
+The card dims the last frame and says *Device unreachable* rather than sitting
+on a still picture that looks like a strip holding a colour. It clears itself
+when the device comes back.
+
+This has to come from the add-on: the card's own connection is to the add-on,
+not to the device, and stays up whether or not the device does.
+
 ## Idle behaviour
 
 A card that isn't being looked at — scrolled out of view, on a hidden tab, or a

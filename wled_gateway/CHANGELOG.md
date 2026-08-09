@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.0
+- An unreachable device now looks unreachable. Previews sat on their last frame
+  when a device dropped off, which is indistinguishable from a strip that
+  simply isn't changing. The gateway tells viewers when a device connects or
+  goes away — they can't tell otherwise, since their own connection is to the
+  add-on and stays up either way — and the card dims the stale frame and says
+  so. New viewers are told the current state as they connect.
+
 ## 1.11.1
 - Fix a card added from the editor saving without its type, which Home
   Assistant then rejected as "No type provided". Filling in the add-on on a

@@ -841,6 +841,9 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
                 # Only ask for frames if someone is actually watching; the socket
                 # stays open either way, for state updates like brightness.
                 await set_live_view(dev_id, bool(subscribers[dev_id]), force=True)
+                # Viewers can't tell a dead device from a quiet one: their socket
+                # is to us, and it stays up either way.
+                await fanout(dev_id, text=json.dumps({"connected": True}))
                 await sync_effect_list(app, dev_id, ip, input_select_entity)
                 backoff = 1
                 async for msg in ws:
@@ -872,7 +875,11 @@ async def upstream_loop(app, dev_id, ip, input_select_entity):
             log.warning("upstream %s (%s) dropped: %s", dev_id, ip, e)
         upstream_ws.pop(dev_id, None)
         live_view_on.pop(dev_id, None)
+        was_connected = device_status[dev_id]["connected"]
         device_status[dev_id]["connected"] = False
+        device_status[dev_id]["fps"] = 0.0
+        if was_connected:
+            await fanout(dev_id, text=json.dumps({"connected": False}))
         await asyncio.sleep(backoff)
         backoff = min(backoff * 2, 30)
 
@@ -890,13 +897,18 @@ async def handle_ws(request):
     if was_idle:
         await set_live_view(dev_id, True)
     # Send what we already know, so a card opened between state changes doesn't
-    # render un-normalised until the user next touches the brightness slider.
-    bri = device_status[dev_id]["bri"]
-    if bri is not None:
-        try:
-            await ws.send_str(json.dumps({"bri": bri}))
-        except Exception:
-            pass
+    # render un-normalised, or look live while the device is actually down.
+    try:
+        await ws.send_str(
+            json.dumps(
+                {
+                    "connected": device_status[dev_id]["connected"],
+                    "bri": device_status[dev_id]["bri"],
+                }
+            )
+        )
+    except Exception:
+        pass
     try:
         async for _ in ws:
             pass  # clients only ever send the initial {'lv':true}; nothing to act on

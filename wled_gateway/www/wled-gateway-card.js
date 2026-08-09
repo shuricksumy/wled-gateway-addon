@@ -21,7 +21,7 @@
 
 // Bump on every change, and bump the ?v= on the Lovelace resource URL to match
 // — the browser caches the file by URL, so without that you keep the old one.
-const CARD_VERSION = "1.10.1";
+const CARD_VERSION = "1.11.0";
 const CARD_TAG_CONFIG = "custom:wled-gateway-card";
 
 /* ------------------------------------------------------------------ *
@@ -467,6 +467,10 @@ class WledGatewayCard extends HTMLElement {
         ha-card { overflow: hidden; }
         .wrap { position: relative; background: #000; overflow: hidden; }
         .wrap.tappable { cursor: pointer; }
+        /* Keep the last frame visible but obviously stale, rather than going
+           black — a black card looks like a strip that's simply switched off. */
+        .wrap.offline canvas { opacity: 0.25; filter: grayscale(0.7); }
+        .msg.over { background: rgba(0, 0, 0, 0.45); color: #fff; }
         /* Absolute, so the canvas can never contribute to layout. Sized from
            its own box it would feed back through devicePixelRatio — each pass
            measuring the size it just grew to — and run away down the page. */
@@ -507,14 +511,29 @@ class WledGatewayCard extends HTMLElement {
     }
   }
 
-  _status(text) {
+  _status(text, { over = false } = {}) {
     if (!this._msg) return;
     if (text) {
       this._msg.textContent = text;
       this._msg.classList.remove("hidden");
+      // "over" leaves the picture visible underneath, for a state where the
+      // last frame is still worth seeing.
+      this._msg.classList[over ? "add" : "remove"]("over");
     } else {
       this._msg.classList.add("hidden");
+      this._msg.classList.remove("over");
     }
+  }
+
+  // The gateway tells us whether the device itself is reachable; our own socket
+  // is to the gateway and stays up regardless, so nothing here could infer it.
+  _setOnline(online) {
+    if (this._online === online) return;
+    this._online = online;
+    if (this._wrap && this._wrap.classList) {
+      this._wrap.classList[online ? "remove" : "add"]("offline");
+    }
+    this._status(online ? null : "Device unreachable", { over: true });
   }
 
   /* ---------------- brightness ---------------- */
@@ -629,6 +648,7 @@ class WledGatewayCard extends HTMLElement {
     if (typeof event.data === "string") {
       try {
         const msg = JSON.parse(event.data);
+        if (typeof msg.connected === "boolean") this._setOnline(msg.connected);
         if (typeof msg.bri === "number") {
           this._deviceBri = msg.bri;
           this._recomputeFactor();

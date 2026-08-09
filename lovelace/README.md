@@ -236,6 +236,9 @@ card:
 - **Stuck or blank in the Companion app** — its webview caches hard, and a
   half-loaded module can wedge the card in a way a page reload won't clear.
   Force-close and reopen the app.
+- **Preview only covers part of the width** — it's inside a `grid` card, which
+  defaults to **3 columns**, so a single card gets a third of the width. Set
+  `columns: 1` on the grid card, or place the card directly in the section.
 - **Vertical strip is a thin sliver, or invisible** — it's nested inside a
   `grid` card, which gives it no height to fill. Put it directly in the section
   with `grid_options`, or set an explicit `height`.

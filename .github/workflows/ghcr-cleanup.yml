@@ -1,0 +1,52 @@
+name: GHCR package cleanup
+
+# build.yml publishes one package per architecture, each tagged twice: the
+# add-on version from config.json (permanent - Home Assistant installs pin to
+# it) and `latest`. `latest` is repointed rather than appended on every build,
+# which orphans the digest it used to point at, and nothing has ever swept those
+# up: all three packages sat at 87 versions, 64 of them untagged.
+#
+# So this deletes untagged leftovers only in practice - every tag build.yml
+# produces is a release tag and is excluded below.
+on:
+  schedule:
+    # Sundays 03:17 UTC, matching the other repos' cleanup workflows
+    - cron: '17 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Preview only - log what would be deleted, delete nothing'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old ghcr.io package versions
+        uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+        with:
+          owner: shuricksumy
+          # One package per matrix arch in build.yml, named
+          # <repo>-<addon dir>-<arch>. Listed explicitly rather than by wildcard
+          # because expand-packages requires a PAT and these three are the whole
+          # set - a fourth arch would need adding here too.
+          package: >-
+            wled-gateway-addon-wled_gateway-amd64,
+            wled-gateway-addon-wled_gateway-aarch64,
+            wled-gateway-addon-wled_gateway-armv7
+          # Keep `latest` and every add-on version tag (X.Y.Z, straight from
+          # config.json); delete anything else plus orphaned untagged layers.
+          # Flat alternation with no nested quantifiers - a pattern like
+          # `[0-9]+(\.[0-9]+)*` trips this action's ReDoS heuristic and fails
+          # the run outright.
+          delete-tags: '.*'
+          exclude-tags: '^latest$|^[0-9]+\.[0-9]+\.[0-9]+$'
+          use-regex: true
+          delete-untagged: true
+          dry-run: ${{ inputs.dry-run || false }}
+          log-level: info

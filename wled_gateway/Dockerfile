@@ -1,4 +1,4 @@
-FROM python:3.12-alpine
+FROM python:3.15-alpine
 WORKDIR /app
 # Bounded below 4.0: that major release changes APIs this app uses, and an
 # unpinned install would pick it up silently on the next rebuild.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.2
+- Drop the `armv7` build. The Python 3.15 Alpine base image is not published for
+  32-bit ARM, so it can no longer be built. `amd64` and `aarch64` are unchanged.
+
 ## 1.13.1
 - Fix cards losing their settings when the editor was opened — on a copy to
   another dashboard, or simply opening the same card a second time. Home

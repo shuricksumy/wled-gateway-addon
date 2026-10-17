@@ -76,8 +76,6 @@ jobs:
             platform: linux/amd64
           - arch: aarch64
             platform: linux/arm64
-          - arch: armv7
-            platform: linux/arm/v7
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4

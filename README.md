@@ -9,7 +9,7 @@
 [![Build and publish add-on image](https://github.com/shuricksumy/wled-gateway-addon/actions/workflows/build.yml/badge.svg)](https://github.com/shuricksumy/wled-gateway-addon/actions/workflows/build.yml)
 [![Home Assistant Add-on](https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/addons/)
 [![Ingress](https://img.shields.io/badge/Ingress-enabled-success)](https://developers.home-assistant.io/docs/add-ons/presentation#ingress)
-[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64%20%7C%20armv7-blue)](#-published-images)
+[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-blue)](#-published-images)
 [![Images on GHCR](https://img.shields.io/badge/images-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/shuricksumy?tab=packages&repo_name=wled-gateway-addon)
 
 [![Open your Home Assistant instance and show the add add-on repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fshuricksumy%2Fwled-gateway-addon)
@@ -128,7 +128,6 @@ picks the matching one automatically via the `{arch}` placeholder in `config.jso
 | --- | --- |
 | `amd64` | `ghcr.io/shuricksumy/wled-gateway-addon-wled_gateway-amd64` |
 | `aarch64` | `ghcr.io/shuricksumy/wled-gateway-addon-wled_gateway-aarch64` |
-| `armv7` | `ghcr.io/shuricksumy/wled-gateway-addon-wled_gateway-armv7` |
 
 Every image is tagged both `latest` and with the add-on version.
 

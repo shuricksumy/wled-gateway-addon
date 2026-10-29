@@ -12,6 +12,11 @@ on:
       - "!wled_gateway/icon.png"
       - "!wled_gateway/logo.png"
       - ".github/workflows/build.yml"
+  # Renovate and Dependabot merge their own PRs once these jobs pass (required
+  # by the main-branch ruleset), so PRs run them too. No paths filter here: a
+  # required check that never starts would leave a PR waiting forever.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -81,6 +86,7 @@ jobs:
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
+        if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -92,7 +98,8 @@ jobs:
         with:
           context: ./wled_gateway
           platforms: ${{ matrix.platform }}
-          push: true
+          # PRs only prove the image builds (e.g. on a new base digest); main publishes it
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/wled-gateway-addon-wled_gateway-${{ matrix.arch }}:latest
             ghcr.io/${{ github.repository_owner }}/wled-gateway-addon-wled_gateway-${{ matrix.arch }}:${{ steps.version.outputs.version }}

@@ -1,4 +1,4 @@
-FROM python:3.15-alpine@sha256:2b4b04f31a4a009c1fadf7ce9338471f288488199cf43dcd1af71f244ea550aa
+FROM python:3.15-alpine@sha256:d499023466546cd88a358f80b46fba4016f32597bc4482bb1c47b483a07d457d
 WORKDIR /app
 # Bounded below 4.0: that major release changes APIs this app uses, and an
 # unpinned install would pick it up silently on the next rebuild.
